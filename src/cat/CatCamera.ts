@@ -79,6 +79,7 @@ export class CatCamera {
   }
 
   update(dt: number): void {
+    dt = Math.min(0.1, Math.max(0, dt));
     const cat = this.cat;
     const inp = this.input;
     // --- ovládání

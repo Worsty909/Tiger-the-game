@@ -269,7 +269,8 @@ export class Lighting {
   }
 
   private apply(p: PhaseDef): void {
-    this.state = p;
+    // bez GI mřížky (předvolba Nízká) svítí difuzní IBL silněji → nižší expozice
+    this.state = this.grid ? p : { ...p, exposure: p.exposure * 0.55 };
     const el = THREE.MathUtils.degToRad(p.elev);
     const hl = Math.hypot(SUN_HEADING.x, SUN_HEADING.z);
     this.sunDir.set((SUN_HEADING.x / hl) * Math.cos(el), -Math.sin(el), (SUN_HEADING.z / hl) * Math.cos(el)).normalize();

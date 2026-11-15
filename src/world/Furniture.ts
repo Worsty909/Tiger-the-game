@@ -384,7 +384,7 @@ async function placeSofa(ctx: WorldCtx): Promise<void> {
     /** Kde Tiger spí v intru. */
     sleepPos: new THREE.Vector3(cx - 0.35, S.seatH, cz + 0.08),
     /** Průkaz zapadlý vzadu pod gaučem. */
-    cardPos: new THREE.Vector3(cx + 0.42, 0.004, cz - hd + 0.2),
+    cardPos: new THREE.Vector3(cx + 0.38, 0.004, cz - 0.04),
   };
 }
 
@@ -432,15 +432,16 @@ async function placeBarChair(ctx: WorldCtx): Promise<void> {
   let model = await assets.model('bar_chair_round_01');
   if (!model) model = fallbackBox(ctx, 0.4, BAR_CHAIR.seatH, 0.4, mats.walnut);
   model.rotation.y = -Math.PI / 2; // opěrka dál od pultu
+  model.scale.setScalar(BAR_CHAIR.scale);
   root.add(model);
   placeOnFloor(model, BAR_CHAIR.x, 0, BAR_CHAIR.z);
   // změř skutečnou výšku sedáku: nejvyšší bod v okolí středu
   const b = boundsOf(model);
   const seatY = Math.min(b.max.y - 0.025, BAR_CHAIR.seatH);
-  ph.addStaticCylinder(BAR_CHAIR.x, seatY - 0.03, BAR_CHAIR.z, 0.03, 0.2, { surface: 'wood', tag: 'barChair' }, false);
+  ph.addStaticCylinder(BAR_CHAIR.x, seatY - 0.03, BAR_CHAIR.z, 0.03, 0.18, { surface: 'wood', tag: 'barChair' }, false);
   // nohy: čtyři tenké válce
   for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const) {
-    ph.addStaticCylinder(BAR_CHAIR.x + dx * 0.15, (seatY - 0.06) / 2, BAR_CHAIR.z + dz * 0.15, (seatY - 0.06) / 2, 0.025, { surface: 'wood' }, false);
+    ph.addStaticCylinder(BAR_CHAIR.x + dx * 0.13, (seatY - 0.06) / 2, BAR_CHAIR.z + dz * 0.13, (seatY - 0.06) / 2, 0.022, { surface: 'wood' }, false);
   }
   ctx.refs.barChairSeat = new THREE.Vector3(BAR_CHAIR.x, seatY, BAR_CHAIR.z);
 }

@@ -84,7 +84,7 @@ export const TABURET = {
 } as const;
 
 /** Závěsná police na severní stěně u okna – houpe se a naklání. */
-export const HANG_SHELF = { x0: -2.8, x1: -2.0, y: 1.75, depth: 0.26, thick: 0.035 } as const;
+export const HANG_SHELF = { x0: -2.85, x1: -2.0, y: 1.68, depth: 0.27, thick: 0.035 } as const;
 
 /** Knihovna u severní stěny, 2,2 m. */
 export const BOOKSHELF = { x0: -1.6, x1: -0.6, depth: 0.34, h: 2.2 } as const;
@@ -121,9 +121,9 @@ export const KITCHEN = {
   tileZ1: -0.62,
 } as const;
 
-export const PENDANT = { x: 0.6, z: -1.15, topY: 1.95, radius: 0.27 } as const;
+export const PENDANT = { x: 0.64, z: -1.2, topY: 1.95, radius: 0.27 } as const;
 
-export const BAR_CHAIR = { x: 0.02, z: -1.0, seatH: 0.72 } as const;
+export const BAR_CHAIR = { x: 0.02, z: -1.0, seatH: 0.64, scale: 0.88 } as const;
 
 export const FEEDER = { x: 2.76, z: -1.25 } as const;
 export const TRASH_BIN = { x: 0.2, z: -2.25 } as const;

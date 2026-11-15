@@ -84,6 +84,10 @@ export class CatController {
   events: CatEvents = {};
   /** Směr kamery (yaw) pro pohyb relativní ke kameře. */
   cameraYaw = 0;
+  /** Skriptovaný pohyb (režim `scripted`). */
+  scriptTarget: THREE.Vector3 | null = null;
+  scriptSpeed = 0.8;
+  scriptYaw: number | null = null;
   /** Bod, kam míří střed obrazovky (nastavuje kamera při míření). */
   aimPoint: THREE.Vector3 | null = null;
   aimNormal: THREE.Vector3 | null = null;
@@ -179,6 +183,33 @@ export class CatController {
     if (this.mode === 'scripted') {
       this.velocity.set(0, 0, 0);
       this.speed = 0;
+      this.turnRate = 0;
+      // skriptovaná chůze k cíli (cutscény)
+      if (this.scriptTarget) {
+        const dx = this.scriptTarget.x - this.position.x;
+        const dz = this.scriptTarget.z - this.position.z;
+        const d = Math.hypot(dx, dz);
+        if (d < 0.03) {
+          this.scriptTarget = null;
+          if (this.scriptYaw !== null) this.yaw = this.scriptYaw;
+        } else {
+          const step = Math.min(d, this.scriptSpeed * dt);
+          this.position.x += (dx / d) * step;
+          this.position.z += (dz / d) * step;
+          const gy = this.physics.groundHeight(this.position.x, this.position.y + 0.3, this.position.z, 0.8, GROUPS.queryGround, this.collider);
+          if (gy > -Infinity) this.position.y += (gy + 0.006 - this.position.y) * Math.min(1, dt * 12);
+          this.speed = step / dt;
+          let dy = Math.atan2(dx, dz) - this.yaw;
+          while (dy > Math.PI) dy -= Math.PI * 2;
+          while (dy < -Math.PI) dy += Math.PI * 2;
+          this.yaw += THREE.MathUtils.clamp(dy, -6 * dt, 6 * dt);
+        }
+      } else if (this.scriptYaw !== null) {
+        let dy = this.scriptYaw - this.yaw;
+        while (dy > Math.PI) dy -= Math.PI * 2;
+        while (dy < -Math.PI) dy += Math.PI * 2;
+        this.yaw += THREE.MathUtils.clamp(dy, -3 * dt, 3 * dt);
+      }
       this.syncBody();
       return;
     }
@@ -283,7 +314,14 @@ export class CatController {
       this.velocity.z += this.slideOff.z;
     }
 
-    this.move(dt);
+    // na unášející plošině (svítidlo, vysavač) kočka v klidu drží drápky: žádné klouzání
+    const riding = this.platformBody !== null && this.physics.info(this.groundCollider)?.carries === true;
+    if (riding && next === 0 && cur === 0 && this.slideOff.lengthSq() === 0) {
+      this.refreshGround();
+      this.grounded = this.groundCollider !== null && this.physics.info(this.groundCollider)?.carries === true;
+    } else {
+      this.move(dt);
+    }
     this.speed = Math.hypot(this.position.x - this.prevPosition.x - this.platformVelocity.x * dt, this.position.z - this.prevPosition.z - this.platformVelocity.z * dt) / dt;
 
     if (!this.grounded) {
@@ -315,6 +353,21 @@ export class CatController {
   private updateAir(dt: number): void {
     this.airTime += dt;
     const g = JUMP.gravity;
+    const arc = this.flightArc;
+    if (arc) {
+      // mířený skok: let přesně po vypočteném (bezkolizním) oblouku, dopad se přichytí k cíli
+      const t = Math.min(this.airTime, arc.time);
+      this.position.set(arc.start.x + arc.velocity.x * t, arc.start.y + arc.velocity.y * t - 0.5 * g * t * t, arc.start.z + arc.velocity.z * t);
+      this.velocity.set(arc.velocity.x, arc.velocity.y - g * t, arc.velocity.z);
+      this.speed = Math.hypot(this.velocity.x, this.velocity.z);
+      if (this.airTime >= arc.time) {
+        this.position.copy(arc.target);
+        this.position.y += 0.006;
+        this.syncBody(true);
+        this.land(Math.abs(this.velocity.y));
+      }
+      return;
+    }
     // přesná balistika: Δp = v·dt − ½·g·dt²
     const vy0 = this.velocity.y;
     this.velocity.y -= g * dt;
@@ -457,23 +510,20 @@ export class CatController {
 
   private launch(arc: JumpArc | null): void {
     const fwd = _b.set(Math.sin(this.yaw), 0, Math.cos(this.yaw));
-    if (arc && arc.valid) {
+    if (arc) {
+      // oblouk už obsahuje rychlost plošiny (viz solveArc)
       this.velocity.copy(arc.velocity);
-      this.yaw = Math.atan2(arc.velocity.x, arc.velocity.z) || this.yaw;
-      this.flightArc = arc;
-    } else if (arc) {
-      // nedosažitelný cíl: skok plnou silou tím směrem (spadne dřív)
-      this.velocity.copy(arc.velocity);
-      this.flightArc = null;
+      if (arc.valid) this.yaw = Math.atan2(arc.velocity.x, arc.velocity.z) || this.yaw;
+      this.flightArc = arc.valid ? arc : null;
     } else {
       // obyčejný skok vpřed
       const run = Math.min(this.speed, CAT.sprintSpeed);
       this.velocity.set(fwd.x * (1.5 + run * 0.6), 2.5 + run * 0.12, fwd.z * (1.5 + run * 0.6));
+      this.velocity.x += this.platformVelocity.x;
+      this.velocity.z += this.platformVelocity.z;
+      this.velocity.y += Math.max(0, this.platformVelocity.y);
       this.flightArc = null;
     }
-    this.velocity.x += this.platformVelocity.x;
-    this.velocity.z += this.platformVelocity.z;
-    this.velocity.y += Math.max(0, this.platformVelocity.y);
     this.mode = 'air';
     this.grounded = false;
     this.airTime = 0;
@@ -589,61 +639,71 @@ export class CatController {
   }
 
   /**
-   * Balistický oblouk ze `start` do `target` s rychlostí ≤ maxSpeed.
-   * Zkouší několik rychlostí a oba úhly, vybere první bezkolizní. `checkCollisions` = test průletu.
+   * Balistický oblouk ze `start` do `target`. Odrazová rychlost vůči podložce je ≤ maxSpeed;
+   * rychlost pohyblivé plošiny (houpající se svítidlo, vysavač) se ke skoku přičítá, takže z ní
+   * dosažitelnost závisí na okamžiku odrazu. Zkouší různé doby letu a vybere nejúspornější
+   * bezkolizní oblouk. `arc.velocity` je výsledná světová rychlost.
    */
   solveArc(start: THREE.Vector3, target: THREE.Vector3, checkCollisions: boolean, extraVel?: THREE.Vector3): JumpArc {
     const g = JUMP.gravity;
     const dx = target.x - start.x;
     const dz = target.z - start.z;
-    const d = Math.max(0.05, Math.hypot(dx, dz));
+    const d = Math.max(0.02, Math.hypot(dx, dz));
     const h = target.y - start.y;
-    const dirX = dx / d;
-    const dirZ = dz / d;
     const vmax = JUMP.maxSpeed;
-    const vminSq = g * (h + Math.hypot(h, d));
-    const result: JumpArc = { start: start.clone(), velocity: new THREE.Vector3(), time: 0, target: target.clone(), valid: false, points: [] };
     const ev = extraVel ?? this.platformVelocity;
-    const candidates: Array<[number, number]> = []; // [vHoriz, vVert]
-    if (vminSq <= vmax * vmax && vminSq > 0) {
-      const vmin = Math.sqrt(vminSq);
-      for (const f of [1.04, 1.12, 1.22, 1.35, 99]) {
-        const v = Math.min(vmax, vmin * f);
-        const v2 = v * v;
-        const disc = v2 * v2 - g * (g * d * d + 2 * h * v2);
-        if (disc < 0) continue;
-        const sq = Math.sqrt(disc);
-        // nízký a vysoký úhel
-        for (const sign of [-1, 1]) {
-          const tan = (v2 + sign * sq) / (g * d);
-          const cos = 1 / Math.sqrt(1 + tan * tan);
-          const vh = v * cos;
-          const vv = v * cos * tan;
-          // vrchol musí převýšit cíl (dopad shora)
-          const apex = (vv * vv) / (2 * g);
-          if (h > 0.05 && apex < h + JUMP.clearance) continue;
-          candidates.push([vh, vv]);
-        }
-        if (v >= vmax) break;
+    const px = ev.x;
+    const pz = ev.z;
+    const py = Math.max(0, ev.y);
+    const result: JumpArc = { start: start.clone(), velocity: new THREE.Vector3(), time: 0, target: target.clone(), valid: false, points: [] };
+    // kandidáti: doba letu → potřebná světová rychlost → rychlost vůči plošině
+    const cands: Array<{ t: number; vx: number; vy: number; vz: number; rel: number }> = [];
+    for (let i = 0; i < 30; i++) {
+      const t = 0.16 + i * 0.04;
+      const vx = dx / t;
+      const vz = dz / t;
+      const vy = (h + 0.5 * g * t * t) / t;
+      const rel = Math.hypot(vx - px, vy - py, vz - pz);
+      if (rel > vmax) continue;
+      if (vy - py < 0.4) continue; // kočka se odráží nahoru, ne „padá“ na cíl
+      if (h > 0.05) {
+        // dopad shora: vrchol oblouku musí cíl převýšit a kočka už musí klesat
+        const apex = (vy * vy) / (2 * g);
+        if (apex < h + JUMP.clearance || vy - g * t > -0.25) continue;
+      }
+      cands.push({ t, vx, vy, vz, rel });
+    }
+    cands.sort((a, b) => a.rel - b.rel);
+    const zero = _zero.set(0, 0, 0);
+    // cílová plocha: kočka se na její hranu „vytáhne“, takže se do kolizí oblouku nepočítá
+    let landing: RAPIER.Collider | undefined;
+    if (checkCollisions && cands.length) {
+      _c.set(target.x, target.y + 0.1, target.z);
+      const hit = this.physics.raycast(_c, DOWN, 0.22, GROUPS.queryGround, this.collider);
+      if (!hit || hit.info?.tag === 'noStand') cands.length = 0;
+      else {
+        landing = hit.collider;
+        // nad cílem musí být místo aspoň pro přikrčenou kočku
+        _c.set(target.x, hit.point.y + CAT.crouchHalf + CAT.crouchRadius + 0.03, target.z);
+        if (this.physics.overlaps(this.crouchShape, _c, undefined, GROUPS.queryStatic, landing)) cands.length = 0;
       }
     }
-    for (const [vh, vv] of candidates) {
-      const time = d / vh;
-      const vel = new THREE.Vector3(dirX * vh, vv, dirZ * vh);
-      const pts = this.sampleArc(start, vel, time, ev);
-      if (!checkCollisions || this.arcIsClear(pts)) {
+    for (const c of cands) {
+      const vel = new THREE.Vector3(c.vx, c.vy, c.vz);
+      const pts = this.sampleArc(start, vel, c.t, zero);
+      if (!checkCollisions || this.arcIsClear(pts, landing)) {
         result.velocity.copy(vel);
-        result.time = time;
+        result.time = c.t;
         result.valid = true;
         result.points = pts;
         return result;
       }
     }
-    // nedosažitelné: ukázat oblouk plnou silou pod 50°
+    // nedosažitelné: ukázat oblouk plnou silou tím směrem
     const ang = THREE.MathUtils.degToRad(h > 0.3 ? 62 : 45);
-    result.velocity.set(dirX * vmax * Math.cos(ang), vmax * Math.sin(ang), dirZ * vmax * Math.cos(ang));
-    result.time = Math.min(1.2, d / (vmax * Math.cos(ang)));
-    result.points = this.sampleArc(start, result.velocity, result.time, ev);
+    result.velocity.set((dx / d) * vmax * Math.cos(ang) + px, vmax * Math.sin(ang) + py, (dz / d) * vmax * Math.cos(ang) + pz);
+    result.time = Math.min(1.2, d / Math.max(0.3, vmax * Math.cos(ang)));
+    result.points = this.sampleArc(start, result.velocity, result.time, zero);
     // oříznout oblouk v místě prvního nárazu
     for (let i = 1; i < result.points.length; i++) {
       const a = result.points[i - 1];
@@ -678,9 +738,10 @@ export class CatController {
     return pts;
   }
 
-  private arcIsClear(pts: THREE.Vector3[]): boolean {
-    // koule o poloměru 8 cm se středem 11 cm nad tlapkami
+  private arcIsClear(pts: THREE.Vector3[], landing?: RAPIER.Collider): boolean {
+    // koule o poloměru 8 cm se středem 11 cm nad tlapkami; cílová plocha se ignoruje
     const n = pts.length;
+    const pred = landing ? (c: RAPIER.Collider) => c.handle !== landing.handle : undefined;
     for (let i = 1; i < n - 1; i++) {
       const a = pts[i];
       const b = pts[i + 1];
@@ -689,10 +750,7 @@ export class CatController {
       if (len < 1e-5) continue;
       dir.divideScalar(len);
       _c.set(a.x, a.y + 0.11, a.z);
-      // poslední úsek končí těsně nad cílem
-      const maxLen = i >= n - 2 ? len - 0.04 : len;
-      if (maxLen <= 0) continue;
-      const hit = this.physics.world.castShape(_c, { x: 0, y: 0, z: 0, w: 1 }, dir, this.arcBall, 0, maxLen, true, undefined, GROUPS.queryGround, this.collider);
+      const hit = this.physics.world.castShape(_c, { x: 0, y: 0, z: 0, w: 1 }, dir, this.arcBall, 0, len, true, undefined, GROUPS.queryGround, this.collider, undefined, pred);
       if (hit) return false;
     }
     return true;
@@ -705,6 +763,7 @@ export class CatController {
 }
 
 const _q = new THREE.Quaternion();
+const _zero = new THREE.Vector3();
 function yawOf(q: THREE.Quaternion): number {
   return Math.atan2(2 * (q.w * q.y + q.x * q.z), 1 - 2 * (q.y * q.y + q.x * q.x));
 }

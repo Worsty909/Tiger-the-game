@@ -51,6 +51,8 @@ export class Input {
   /** Rozhlížení v radiánech za tento snímek (už včetně citlivosti). */
   readonly look = { x: 0, y: 0 };
   wheel = 0;
+  /** Surový směr (šipky/WSAD/páčka) bez ohledu na stav hry: pro menu a zámek. */
+  readonly rawDir = { x: 0, y: 0 };
   pointerLocked = false;
   /** Když je false, herní vstupy se ignorují (menu, deník…). */
   gameplayEnabled = false;
@@ -237,6 +239,8 @@ export class Input {
       mx /= len;
       my /= len;
     }
+    this.rawDir.x = Math.abs(mx) > 0.5 ? Math.sign(mx) : 0;
+    this.rawDir.y = Math.abs(my) > 0.5 ? Math.sign(my) : 0;
     const on = this.gameplayEnabled;
     this.move.x = on ? mx : 0;
     this.move.y = on ? my : 0;

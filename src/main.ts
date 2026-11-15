@@ -13,7 +13,7 @@ const fill = loading.querySelector('.loading-fill') as HTMLDivElement;
 const label = loading.querySelector('.loading-label') as HTMLDivElement;
 
 async function boot(): Promise<void> {
-  const game = new Game(canvas);
+  const game = new Game(canvas, ui);
   installDebugAPI(game);
   game.onLoadProgress = (text, f) => {
     fill.style.width = `${Math.round(f * 100)}%`;
@@ -21,7 +21,6 @@ async function boot(): Promise<void> {
   };
   await game.init();
   loading.remove();
-  game.setState('playing');
   game.start();
 }
 

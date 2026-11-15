@@ -2,6 +2,9 @@ import * as THREE from 'three';
 import type { Game } from '../core/Game';
 import type { Action } from '../core/Input';
 import { PHASES } from '../world/Lighting';
+import { audio } from '../core/Audio';
+import { lockDebug, CODE } from '../puzzles/steps/06_lock';
+import { vacuumDebug } from '../puzzles/steps/07_vacuum';
 
 /**
  * Debug API: window.__tigerDebug
@@ -10,6 +13,8 @@ import { PHASES } from '../world/Lighting';
 export function installDebugAPI(game: Game): Record<string, unknown> {
   let collisionLines: THREE.LineSegments | null = null;
   let fpsEl: HTMLDivElement | null = null;
+  let moveNow: { x: number; y: number } | null = null;
+  let heldNow: Action[] = [];
 
   const api = {
     game,
@@ -32,6 +37,13 @@ export function installDebugAPI(game: Game): Record<string, unknown> {
         surface: c.surface,
         groundTag: c.groundTag,
         phase: game.lighting.phase,
+        solved: game.graph ? game.graph.solved() : [],
+        active: game.graph ? game.graph.order.filter((id) => game.graph.isActive(id)) : [],
+        journal: [...game.journal.found],
+        modal: game.ui ? game.ui.modal : 'none',
+        prompt: game.interact?.current?.id ?? null,
+        stats: { ...game.stats, time: +game.playTime.toFixed(1) },
+        inputLocked: c.inputLocked,
         fps: +game.fps.toFixed(1),
         calls: game.gfx.info.calls,
         triangles: game.gfx.info.triangles,
@@ -57,10 +69,76 @@ export function installDebugAPI(game: Game): Record<string, unknown> {
     },
     /** Virtuální vstup: pohyb (x do strany, y dopředu) + držené akce. */
     input(move: { x: number; y: number } | null, held: Action[] = []) {
+      moveNow = move;
+      heldNow = held;
       game.input.setVirtual(move, held);
     },
+    /** Krátký stisk akce (zpracuje se jedním krokem simulace). */
     tap(action: Action) {
-      game.input.tap(action);
+      const held = [...heldNow];
+      game.input.setVirtual(moveNow, [...held, action]);
+      game.simulate(1 / 60);
+      game.input.setVirtual(moveNow, held);
+      game.simulate(1 / 60);
+    },
+    // ---------------------------------------------------------------- hádanky
+    /** Spustí hru bez intra (pokud ještě neběží). */
+    startGame() {
+      game.flow.startDirect();
+    },
+    /** Vyřeší krok okamžitě (včetně jeho závislostí a stavu světa). */
+    solveStep(id: string) {
+      game.graph.forceSolve(id);
+      return game.graph.solved();
+    },
+    /** Skočí na krok: vyřeší vše, na čem závisí, a nechá ho aktivní. */
+    gotoStep(id: string) {
+      const step = game.graph.steps.get(id);
+      if (!step) return null;
+      for (const r of step.requires) game.graph.forceSolve(r);
+      return { active: game.graph.isActive(id), solved: game.graph.solved() };
+    },
+    steps() {
+      return game.graph.order.map((id) => ({ id, state: game.graph.stateOf(id), title: game.graph.steps.get(id)!.title }));
+    },
+    flags() {
+      return { ...game.flags };
+    },
+    /** Přesune pohyblivý předmět (taburet, boot, laundry, trashBin). */
+    moveBody(name: string, x: number, y: number, z: number) {
+      const e = name === 'trashBin' ? game.ctx.refs.trashBin?.entry : game.ctx.refs[name];
+      if (!e) return false;
+      e.body.setTranslation({ x, y, z }, true);
+      e.body.setLinvel({ x: 0, y: 0, z: 0 }, true);
+      e.body.setAngvel({ x: 0, y: 0, z: 0 }, true);
+      return true;
+    },
+    bodyPos(name: string) {
+      const e = name === 'trashBin' ? game.ctx.refs.trashBin?.entry : game.ctx.refs[name];
+      if (!e) return null;
+      const t = e.body.translation();
+      return [+t.x.toFixed(3), +t.y.toFixed(3), +t.z.toFixed(3)];
+    },
+    /** Kódový zámek: nastaví číslice a zkusí kód (musí být otevřený detail zámku). */
+    lock: {
+      state: () => ({ ...lockDebug.state, purr: undefined, digits: [...game.ctx.refs.lock.digits] }),
+      set(digits: number[]) {
+        game.ctx.refs.lock.digits.splice(0, 4, ...digits);
+      },
+      code: () => [...CODE],
+      confirm() {
+        game.modalHandler?.('confirm');
+      },
+    },
+    vacuum: () => ({ state: vacuumDebug.state.state, bounces: vacuumDebug.state.bounces, pos: game.ctx.refs.vacuum.group.position.toArray().map((v: number) => +v.toFixed(3)) }),
+    hint() {
+      game.flow.hint();
+    },
+    save() {
+      game.flow.save();
+    },
+    audioCounts() {
+      return { ...audio.counts };
     },
     /** Akce animátoru: none | sit | lick | sniff | eat | lie | sleep */
     action(name: string) {

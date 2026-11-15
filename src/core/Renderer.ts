@@ -113,6 +113,23 @@ void main() {
   gl_FragColor = vec4(base.rgb + sunColor * f * density, base.a);
 }`;
 
+/** Průchod, který nic nekreslí – jen si od composeru vyžádá hloubkovou texturu scény. */
+class DepthTap extends Pass {
+  texture: THREE.Texture | null = null;
+  constructor() {
+    super('DepthTap');
+    this.needsSwap = false;
+    this.needsDepthTexture = true;
+    this.enabled = false;
+  }
+  override setDepthTexture(depthTexture: THREE.Texture): void {
+    this.texture = depthTexture;
+  }
+  override render(): void {
+    /* nic */
+  }
+}
+
 /** Volumetrické paprsky: ray-march proti stínové mapě slunce v polovičním rozlišení + rozmazání. */
 class VolumetricPass extends Pass {
   private march: THREE.ShaderMaterial;
@@ -278,6 +295,7 @@ export class Renderer {
   private vignette: VignetteEffect;
   private noise: NoiseEffect;
   private overlayPass: RenderPass;
+  private depthTap = new DepthTap();
   private time = 0;
   private _m = new THREE.Matrix4();
   readonly size = new THREE.Vector2(1, 1);
@@ -309,6 +327,7 @@ export class Renderer {
     this.composer = new EffectComposer(this.renderer, { frameBufferType: THREE.HalfFloatType, multisampling: 0 });
     this.renderPass = new RenderPass(scene, this.camera);
     this.composer.addPass(this.renderPass);
+    this.composer.addPass(this.depthTap);
 
     if (q.ao !== 'off') {
       const ao = new N8AOPostPass(scene, this.camera, 1, 1);
@@ -381,8 +400,9 @@ export class Renderer {
     this.size.set(w, h);
   }
 
+  /** Hloubková textura hlavní scény (pro překryvy: pachové stopy, oblouk skoku). */
   get depthTexture(): THREE.Texture | null {
-    return (this.composer as unknown as { depthTexture: THREE.Texture | null }).depthTexture ?? null;
+    return this.depthTap.texture;
   }
 
   setFov(fov: number): void {
