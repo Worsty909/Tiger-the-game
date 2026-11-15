@@ -73,12 +73,13 @@ export class Game {
 
     progress('Tiger…', 0.55);
     this.cat = new CatController(this.physics, this.input);
-    this.tiger = new Tiger(this.cat);
+    this.tiger = new Tiger(this.cat, this.physics);
     await this.tiger.load();
     this.scene.add(this.tiger.root);
     this.lighting.hideOnBake.push(this.tiger.root);
     this.camera = new CatCamera(this.gfx.camera, this.physics, this.input, this.cat);
     this.cat.teleport(new THREE.Vector3(-0.6, 0.02, -0.75), Math.PI * 0.75);
+    this.tiger.snap();
     this.camera.resetBehind();
     assets.onProgress = null;
 
@@ -94,6 +95,7 @@ export class Game {
     this.ready = true;
     bus.on('settingsChanged', ({ key }) => {
       if (key === 'fov') this.gfx.setFov(settings.data.fov);
+      if (key === 'fur') this.tiger.fur.setEnabled(settings.data.fur);
     });
   }
 

@@ -40,6 +40,7 @@ export function installDebugAPI(game: Game): Record<string, unknown> {
     },
     teleport(x: number, y: number, z: number, yaw?: number) {
       game.cat.teleport(new THREE.Vector3(x, y, z), yaw);
+      game.tiger.snap();
       game.camera.resetBehind();
     },
     /** Skok na zadaný bod (pokud je dosažitelný). */
@@ -60,6 +61,13 @@ export function installDebugAPI(game: Game): Record<string, unknown> {
     },
     tap(action: Action) {
       game.input.tap(action);
+    },
+    /** Akce animátoru: none | sit | lick | sniff | eat | lie | sleep */
+    action(name: string) {
+      game.tiger.anim.action = name as never;
+    },
+    tailMood(name: string) {
+      game.tiger.anim.tailMood = name as never;
     },
     look(yaw: number, pitch: number) {
       game.camera.yaw = yaw;
