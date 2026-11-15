@@ -37,7 +37,8 @@ export function buildRoom(ctx: WorldCtx): void {
 
   // ---------- stěny ----------
   const wallSeg = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number) => {
-    boxSpan(root, mats.wall, x0, y0, z0, x1, y1, z1, 0);
+    // stěny sahají pod úroveň podlahy, aby pod nimi neprosvítalo nízké slunce
+    boxSpan(root, mats.wall, x0, y0 === 0 ? -0.3 : y0, z0, x1, y1, z1, 0);
     ph.addStaticAABB(x0, y0, z0, x1, y1, z1, { surface: 'stone', tag: 'wall' });
   };
   // sever, jih, východ

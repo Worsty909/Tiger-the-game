@@ -1,0 +1,66 @@
+:root {
+  --ink: #f4efe6;
+  --ink-dim: rgba(244, 239, 230, 0.66);
+  --panel: rgba(18, 16, 14, 0.62);
+  --accent: #f0b35a;
+  --line: rgba(244, 239, 230, 0.18);
+  font-family: 'Segoe UI', 'Inter', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #0b0a09;
+  color: var(--ink);
+}
+#game {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+  outline: none;
+}
+#ui {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  user-select: none;
+}
+.loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: #0b0a09;
+  pointer-events: auto;
+}
+.loading-box {
+  width: min(360px, 70vw);
+  text-align: center;
+}
+.loading-title {
+  font-size: 44px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  font-weight: 300;
+  margin: 0 0 28px 0.32em;
+}
+.loading-bar {
+  height: 2px;
+  background: var(--line);
+  overflow: hidden;
+}
+.loading-fill {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+.loading-label {
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--ink-dim);
+  letter-spacing: 0.08em;
+}

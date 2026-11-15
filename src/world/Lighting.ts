@@ -29,16 +29,16 @@ export interface PhaseDef {
 }
 
 export const PHASES: PhaseDef[] = [
-  { elev: 10.0, kelvin: 4500, sun: 11.0, skyMix: 0.0, skyExp: 1.0, exposure: 1.0, floorLamp: 0, pendant: 0, strip: 0, city: 0 },
-  { elev: 8.6, kelvin: 4200, sun: 10.4, skyMix: 0.0, skyExp: 0.97, exposure: 1.02, floorLamp: 0, pendant: 0, strip: 0, city: 0 },
-  { elev: 7.2, kelvin: 3850, sun: 9.6, skyMix: 0.05, skyExp: 0.93, exposure: 1.06, floorLamp: 0, pendant: 0, strip: 0, city: 0 },
-  { elev: 5.8, kelvin: 3450, sun: 8.6, skyMix: 0.15, skyExp: 0.88, exposure: 1.12, floorLamp: 0.35, pendant: 0, strip: 0, city: 0.05 },
-  { elev: 4.5, kelvin: 3000, sun: 7.3, skyMix: 0.3, skyExp: 0.82, exposure: 1.2, floorLamp: 0.6, pendant: 0, strip: 0.4, city: 0.15 },
-  { elev: 3.2, kelvin: 2500, sun: 5.6, skyMix: 0.5, skyExp: 0.74, exposure: 1.32, floorLamp: 0.8, pendant: 0, strip: 0.7, city: 0.3 },
-  { elev: 2.0, kelvin: 2150, sun: 3.6, skyMix: 0.75, skyExp: 0.64, exposure: 1.5, floorLamp: 1, pendant: 0.6, strip: 1, city: 0.5 },
-  { elev: 0.9, kelvin: 1900, sun: 1.9, skyMix: 1.0, skyExp: 0.55, exposure: 1.7, floorLamp: 1, pendant: 1, strip: 1, city: 0.7 },
+  { elev: 10.0, kelvin: 4500, sun: 11.0, skyMix: 0.0, skyExp: 1.0, exposure: 3.5, floorLamp: 0, pendant: 0, strip: 0, city: 0 },
+  { elev: 8.6, kelvin: 4200, sun: 10.4, skyMix: 0.0, skyExp: 0.97, exposure: 3.55, floorLamp: 0, pendant: 0, strip: 0, city: 0 },
+  { elev: 7.2, kelvin: 3850, sun: 9.6, skyMix: 0.05, skyExp: 0.93, exposure: 3.6, floorLamp: 0, pendant: 0, strip: 0, city: 0 },
+  { elev: 5.8, kelvin: 3450, sun: 8.6, skyMix: 0.15, skyExp: 0.88, exposure: 3.7, floorLamp: 0.35, pendant: 0, strip: 0, city: 0.05 },
+  { elev: 4.5, kelvin: 3000, sun: 7.3, skyMix: 0.3, skyExp: 0.82, exposure: 3.9, floorLamp: 0.6, pendant: 0, strip: 0.4, city: 0.15 },
+  { elev: 3.2, kelvin: 2500, sun: 5.6, skyMix: 0.5, skyExp: 0.74, exposure: 4.2, floorLamp: 0.8, pendant: 0, strip: 0.7, city: 0.3 },
+  { elev: 2.0, kelvin: 2150, sun: 3.6, skyMix: 0.75, skyExp: 0.64, exposure: 4.6, floorLamp: 1, pendant: 0.6, strip: 1, city: 0.5 },
+  { elev: 0.9, kelvin: 1900, sun: 1.9, skyMix: 1.0, skyExp: 0.55, exposure: 5.2, floorLamp: 1, pendant: 1, strip: 1, city: 0.7 },
   // finále – modrá hodinka (během závěrečných titulků)
-  { elev: -5.0, kelvin: 1800, sun: 0.0, skyMix: 2.0, skyExp: 0.2, exposure: 2.5, floorLamp: 1, pendant: 1, strip: 1, city: 1 },
+  { elev: -5.0, kelvin: 1800, sun: 0.0, skyMix: 2.0, skyExp: 0.2, exposure: 6.5, floorLamp: 1, pendant: 1, strip: 1, city: 1 },
 ];
 
 export function kelvinToColor(k: number, target = new THREE.Color()): THREE.Color {
@@ -101,11 +101,15 @@ export class Lighting {
   private duration = 5;
 
   private fill: THREE.HemisphereLight;
+  private ambient: THREE.AmbientLight;
   private floorLamp: THREE.PointLight;
   private pendantLight: THREE.SpotLight;
   private strip: THREE.RectAreaLight;
+  /** Dvě mřížky sond: přední svítí, do zadní se zapéká; po dokončení se prohodí (bez probliknutí). */
   private grid: LightProbeGridWebGL | null = null;
+  private gridBack: LightProbeGridWebGL | null = null;
   private gridTotal = 0;
+  private bounces = settings.preset.giBounces;
   private bakeCursor = 0;
   private bakePass = 0;
   private bakePassesWanted = 0;
@@ -119,6 +123,8 @@ export class Lighting {
   readonly hideOnBake: THREE.Object3D[] = [];
   /** 0..1 – jak moc je scéna „ve tmě“ (pro noční vidění a tapetum). */
   darkness = 0;
+  /** Zisk vyvážení bílé pro grading. */
+  readonly whiteBalance = new THREE.Vector3(1, 1, 1);
 
   constructor(private ctx: WorldCtx, private renderer: THREE.WebGLRenderer) {
     patchShaderChunks();
@@ -147,6 +153,10 @@ export class Lighting {
     // slabé vyplňovací světlo – jen když není GI mřížka (nízká kvalita)
     this.fill = new THREE.HemisphereLight(0xffe2c0, 0x6a5a48, 0);
     ctx.scene.add(this.fill);
+
+    // nepatrné všesměrové světlo = aproximace vyšších odrazů (aby stíny nebyly úplně černé)
+    this.ambient = new THREE.AmbientLight(0xfff0e0, 0.08);
+    ctx.scene.add(this.ambient);
 
     // stojací lampa
     const fl = ctx.refs.floorLamp;
@@ -197,12 +207,21 @@ export class Lighting {
     ctx.scene.add(this.cubeCam);
 
     // GI mřížka sond
-    if (q.gi !== 'off') {
-      const res = q.gi === 'full' ? [13, 6, 11] : [9, 4, 7];
-      const grid = new LightProbeGridWebGL(ROOM.maxX - ROOM.minX, ROOM.h, ROOM.maxZ - ROOM.minZ, res[0], res[1], res[2]);
-      grid.position.set(0, ROOM.h / 2, 0);
-      ctx.scene.add(grid);
-      this.grid = grid;
+    // testy mohou GI přepsat: ?gi=off|coarse|full&bounces=1
+    const url = new URLSearchParams(location.search);
+    const gi = (url.get('gi') as typeof q.gi | null) ?? q.gi;
+    if (url.has('bounces')) this.bounces = Number(url.get('bounces'));
+    if (gi !== 'off') {
+      const res = gi === 'full' ? [13, 6, 11] : [9, 4, 7];
+      const make = (priority: number) => {
+        const grid = new LightProbeGridWebGL(ROOM.maxX - ROOM.minX, ROOM.h, ROOM.maxZ - ROOM.minZ, res[0], res[1], res[2]);
+        grid.position.set(0, ROOM.h / 2, 0);
+        grid.priority = priority;
+        ctx.scene.add(grid);
+        return grid;
+      };
+      this.grid = make(1);
+      this.gridBack = make(0);
       this.gridTotal = res[0] * res[1] * res[2];
     }
   }
@@ -273,6 +292,7 @@ export class Lighting {
     const hasGrid = this.grid !== null;
     this.fill.intensity = hasGrid ? 0 : 0.35 * p.skyExp;
     this.fill.color.copy(this.sunColor).lerp(new THREE.Color(0.75, 0.82, 1), 0.5);
+    this.ambient.intensity = 0.1 * p.skyExp + 0.03 * p.floorLamp;
 
     // lampy
     const refs = this.ctx.refs;
@@ -289,6 +309,17 @@ export class Lighting {
     this.strip.visible = p.strip > 0.01;
     if (refs.stripMat) refs.stripMat.emissiveIntensity = 10 * p.strip;
     if (refs.hoodLed) refs.hoodLed.material.emissiveIntensity = 0;
+
+    // částečné vyvážení bílé: kompenzuje ~55 % barevného nádechu slunce
+    const wbK = 0.7;
+    const sc = this.sunColor;
+    const mean = (sc.r + sc.g + sc.b) / 3;
+    this.whiteBalance.set(
+      THREE.MathUtils.lerp(1, mean / Math.max(sc.r, 0.05), wbK),
+      THREE.MathUtils.lerp(1, mean / Math.max(sc.g, 0.05), wbK),
+      THREE.MathUtils.lerp(1, Math.min(2.2, mean / Math.max(sc.b, 0.05)), wbK),
+    );
+    this.sky.uniforms.saturation.value = THREE.MathUtils.clamp(0.5 + (4500 - p.kelvin) / 4000, 0.5, 1);
 
     this.darkness = THREE.MathUtils.clamp(1 - (p.sun * horizonFade) / 6 - p.skyExp * 0.3, 0, 1);
   }
@@ -310,54 +341,71 @@ export class Lighting {
     for (const o of this.hideOnBake) o.visible = !hidden;
   }
 
+  private bakeRange(grid: LightProbeGridWebGL, start: number, count: number, pass: number): void {
+    // během zapékání musí „vyhrát“ zapékaná mřížka (odrazy čtou její předchozí průchod)
+    const prev = grid.priority;
+    grid.priority = 10;
+    this.setHidden(true);
+    try {
+      grid.bake(this.renderer, this.ctx.scene, { cubemapSize: 8, near: 0.04, far: 1200, start, count, pass });
+    } finally {
+      this.setHidden(false);
+      grid.priority = prev;
+    }
+  }
+
   /** Úplné zapečení (při načítání). Vrací promise kvůli průběhu načítání. */
   async bakeAll(onProgress?: (f: number) => void): Promise<void> {
-    if (this.grid) {
-      const bounces = settings.preset.giBounces;
+    if (this.grid && this.gridBack) {
+      const bounces = this.bounces;
       const chunk = 40;
       const total = this.gridTotal * (bounces + 1);
       let done = 0;
-      this.setHidden(true);
       for (let pass = 0; pass <= bounces; pass++) {
         for (let start = 0; start < this.gridTotal; start += chunk) {
           const count = Math.min(chunk, this.gridTotal - start);
-          this.grid.bake(this.renderer, this.ctx.scene, { cubemapSize: 8, near: 0.04, far: 1200, start, count, pass });
+          this.bakeRange(this.grid, start, count, pass);
           done += count;
           onProgress?.(done / total);
           // nechat prohlížeč vykreslit průběh
           if (start % (chunk * 4) === 0) await new Promise((r) => setTimeout(r, 0));
         }
       }
-      this.setHidden(false);
+      // zadní mřížka potřebuje jen existující texturu (počet mřížek v shaderu se pak už nemění)
+      this.bakeRange(this.gridBack, 0, 1, 0);
     }
     this.updateEnvironment();
     this.bakeQueued = false;
     this.bakePassesWanted = 0;
   }
 
-  /** Inkrementální přepočet – volat každý snímek s rozpočtem sond. */
+  /** Inkrementální přepočet do zadní mřížky – volat každý snímek s rozpočtem sond. */
   bakeStep(budget = 24): void {
     if (this.bakeQueued && this.bakePassesWanted === 0) {
       this.bakeQueued = false;
-      if (this.grid) {
-        this.bakePassesWanted = settings.preset.giBounces + 1;
+      if (this.gridBack) {
+        this.bakePassesWanted = this.bounces + 1;
         this.bakePass = 0;
         this.bakeCursor = 0;
       } else {
         this.updateEnvironment();
       }
     }
-    if (!this.grid || this.bakePassesWanted === 0) return;
+    if (!this.grid || !this.gridBack || this.bakePassesWanted === 0) return;
     const count = Math.min(budget, this.gridTotal - this.bakeCursor);
-    this.setHidden(true);
-    this.grid.bake(this.renderer, this.ctx.scene, { cubemapSize: 8, near: 0.04, far: 1200, start: this.bakeCursor, count, pass: this.bakePass });
-    this.setHidden(false);
+    this.bakeRange(this.gridBack, this.bakeCursor, count, this.bakePass);
     this.bakeCursor += count;
     if (this.bakeCursor >= this.gridTotal) {
       this.bakeCursor = 0;
       this.bakePass++;
       if (this.bakePass >= this.bakePassesWanted) {
         this.bakePassesWanted = 0;
+        // prohození: čerstvě zapečená mřížka jde dopředu
+        const front = this.grid;
+        this.grid = this.gridBack;
+        this.gridBack = front;
+        this.grid.priority = 1;
+        this.gridBack.priority = 0;
         this.updateEnvironment();
       }
     }
@@ -368,6 +416,7 @@ export class Lighting {
     const scene = this.ctx.scene;
     this.setHidden(true);
     const prevTarget = this.renderer.getRenderTarget();
+    this.renderer.shadowMap.needsUpdate = true;
     this.cubeCam.update(this.renderer, scene);
     this.setHidden(false);
     const rt = this.pmrem.fromCubemap(this.cubeRT.texture);

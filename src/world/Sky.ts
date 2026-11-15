@@ -46,6 +46,7 @@ export class Sky {
     sunGlow: { value: new THREE.Color(1, 0.6, 0.3) },
     sunGlowAmount: { value: 0 },
     tint: { value: new THREE.Color(1, 1, 1) },
+    saturation: { value: 1 },
   };
   private textures: THREE.Texture[] = [];
   readonly city = new THREE.Group();
@@ -75,6 +76,7 @@ export class Sky {
         uniform vec3 sunGlow;
         uniform float sunGlowAmount;
         uniform vec3 tint;
+        uniform float saturation;
         varying vec3 vDir;
         const float PI = 3.141592653589793;
         void main() {
@@ -87,6 +89,7 @@ export class Sky {
           vec3 b = texture2D(texB, vec2(u, v)).rgb;
           vec3 col = mix(a, b, mixAB);
           col = min(col, vec3(60.0)); // slunce v HDRI by přepálilo bloom
+          col = mix(vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))), col, saturation);
           // vlastní sluneční kotouč a záře (HDRI má slunce jen v jedné výšce)
           float cosA = dot(d, normalize(sunDir));
           float disk = smoothstep(0.99990, 0.99997, cosA);
@@ -159,14 +162,14 @@ export class Sky {
     const count = Math.round(150 * density);
     for (let i = 0; i < count; i++) {
       // rozmístění do pásu na západ od bytu (x < -9), řidčeji do stran
-      const dist = 12 + Math.pow(R(), 1.5) * 190;
+      const dist = 22 + Math.pow(R(), 1.5) * 190;
       const ang = Math.PI + (R() - 0.5) * 2.5; // směr na západ ± 72°
       const x = Math.cos(ang) * dist + ROOM.minX;
       const z = Math.sin(ang) * dist;
-      if (x > -10) continue;
+      if (x > -16) continue;
       const w = 9 + R() * 12;
       const dep = 9 + R() * 9;
-      const h = 8 + R() * 6 + (dist > 60 ? R() * 9 : 0) - (dist < 30 ? 2.5 : 0);
+      const h = dist < 45 ? 5.5 + R() * 3.5 : dist < 110 ? 7 + R() * 6.5 : 9 + R() * 10;
       const rot = (Math.round(R() * 3) * Math.PI) / 2 + (R() - 0.5) * 0.25;
       d.position.set(x, groundY + h / 2, z);
       d.rotation.set(0, rot, 0);

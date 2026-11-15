@@ -146,7 +146,7 @@ export async function createMaterials(): Promise<MaterialLib> {
   const linenWarm = pbrMaterial(linenS, { tile: 0.3, color: 0xd9cdb8, roughness: 1, normalScale: 1.2, useMap: false });
 
   const lib: MaterialLib = {
-    parquet: pbrMaterial(parquetS, { tile: 2.2, roughness: 0.9, normalScale: 0.8, color: 0xf2e6d8 }),
+    parquet: pbrMaterial(parquetS, { tile: 2.2, roughness: 0.85, normalScale: 0.8, color: 0xffffff }),
     wall,
     ceiling,
     skirting: lacquer(0xf3f1ec, 0.42),

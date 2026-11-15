@@ -6,7 +6,7 @@ export default defineConfig({
   preview: { host: true, port: 4173 },
   build: {
     target: 'es2022',
-    chunkSizeWarningLimit: 4000,
+    chunkSizeWarningLimit: 9000,
   },
   optimizeDeps: {
     exclude: ['@dimforge/rapier3d-compat'],

@@ -177,7 +177,7 @@ function buildTV(ctx: WorldCtx): void {
   const sy = TV.screenY;
   const bezel = boxAt(g, mats.plasticDark, TV.x, sy, zS - 0.03, TV.screenW + 0.016, TV.screenH + 0.016, 0.03, 0.006);
   bezel.castShadow = true;
-  const screen = new THREE.Mesh(new THREE.PlaneGeometry(TV.screenW, TV.screenH), mats.screen);
+  const screen = new THREE.Mesh(new THREE.PlaneGeometry(TV.screenW, TV.screenH), mats.screen.clone());
   screen.rotation.y = Math.PI;
   screen.position.set(TV.x, sy, zS - 0.0462);
   g.add(screen);
@@ -543,6 +543,7 @@ async function placeDecor(ctx: WorldCtx): Promise<void> {
     clock.rotation.y = -Math.PI / 2;
     clock.position.set(ROOM.maxX - 0.002, CLOCK.y, CLOCK.z);
     detail.add(clock);
+    (ctx.refs.noMerge ??= []).push(clock);
     ctx.refs.clock = { model: clock, pos: clock.position.clone() };
   } else {
     ctx.refs.clock = { model: null, pos: new THREE.Vector3(ROOM.maxX - 0.02, CLOCK.y, CLOCK.z) };
