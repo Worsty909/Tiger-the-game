@@ -1,0 +1,28 @@
+{
+  "name": "tiger-the-game",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Tiger – 3D úniková hra s bengálskou kočkou (Three.js)",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test:playthrough": "node tools/playthrough.mjs",
+    "test:shots": "node tools/screenshots.mjs",
+    "test:fps": "node tools/fps.mjs"
+  },
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.21.0",
+    "n8ao": "^2.0.2",
+    "postprocessing": "^6.39.6",
+    "three": "^0.187.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.187.0",
+    "playwright": "1.63.0",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  }
+}

@@ -1,0 +1,125 @@
+{
+  "comment": "CC0 assety z Poly Haven (https://polyhaven.com). Stahuje tools/fetch_assets.mjs do public/assets/.",
+  "models": [
+    {
+      "id": "Sofa_01",
+      "res": "1k"
+    },
+    {
+      "id": "Ottoman_01",
+      "res": "1k"
+    },
+    {
+      "id": "modern_coffee_table_01",
+      "res": "1k"
+    },
+    {
+      "id": "bar_chair_round_01",
+      "res": "1k"
+    },
+    {
+      "id": "potted_plant_02",
+      "res": "1k"
+    },
+    {
+      "id": "potted_plant_04",
+      "res": "1k"
+    },
+    {
+      "id": "wicker_basket_01",
+      "res": "1k"
+    },
+    {
+      "id": "wall_clock",
+      "res": "1k"
+    },
+    {
+      "id": "throw_pillows_01",
+      "res": "1k"
+    },
+    {
+      "id": "ceramic_vase_01",
+      "res": "1k"
+    },
+    {
+      "id": "ceramic_vase_03",
+      "res": "1k"
+    },
+    {
+      "id": "book_encyclopedia_set_01",
+      "res": "1k"
+    },
+    {
+      "id": "rubber_boots",
+      "res": "1k"
+    },
+    {
+      "id": "modern_arm_chair_01",
+      "res": "1k"
+    }
+  ],
+  "textures": [
+    {
+      "id": "herringbone_parquet",
+      "res": "2k"
+    },
+    {
+      "id": "white_plaster_02",
+      "res": "1k"
+    },
+    {
+      "id": "wool_boucle",
+      "res": "1k"
+    },
+    {
+      "id": "long_white_tiles",
+      "res": "1k"
+    },
+    {
+      "id": "marble_01",
+      "res": "1k"
+    },
+    {
+      "id": "large_grey_tiles",
+      "res": "1k"
+    },
+    {
+      "id": "oak_veneer_01",
+      "res": "1k"
+    },
+    {
+      "id": "walnut_veneer",
+      "res": "1k"
+    },
+    {
+      "id": "rough_linen",
+      "res": "1k"
+    },
+    {
+      "id": "clay_roof_tiles_02",
+      "res": "1k"
+    },
+    {
+      "id": "concrete_tiles",
+      "res": "1k"
+    },
+    {
+      "id": "yellow_plaster",
+      "res": "1k"
+    }
+  ],
+  "hdris": [
+    {
+      "id": "qwantani_sunset_puresky",
+      "res": "1k"
+    },
+    {
+      "id": "qwantani_dusk_1_puresky",
+      "res": "1k"
+    },
+    {
+      "id": "qwantani_dusk_2_puresky",
+      "res": "1k"
+    }
+  ]
+}
