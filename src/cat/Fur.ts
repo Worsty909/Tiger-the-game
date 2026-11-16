@@ -46,6 +46,8 @@ float eyeMaskAt(vec3 p) {
 
 export class Fur {
   readonly shells: THREE.SkinnedMesh | null = null;
+  private enabled = settings.data.fur;
+  private lodLayers = -1;
   readonly skin: THREE.MeshPhysicalMaterial;
   private furMat: THREE.MeshPhysicalMaterial | null = null;
   readonly uniforms = {
@@ -178,7 +180,7 @@ export class Fur {
               float keep = mix(strand, soft, smoothstep(0.9, 2.2, fw));
               if (keep < 0.5) discard;
               // u kořínků tmavší (vlastní stín srsti), špičky světlejší
-              diffuseColor.rgb *= mix(0.7, 1.16, vShell);
+              diffuseColor.rgb *= mix(0.68, 1.04, vShell);
             }`,
           )
           .replace(
@@ -211,7 +213,24 @@ export class Fur {
   }
 
   setEnabled(on: boolean): void {
-    if (this.shells) this.shells.visible = on;
+    this.enabled = on;
+    if (this.shells) this.shells.visible = on && this.lodLayers > 0;
+  }
+
+  /**
+   * LOD srsti podle vzdálenosti kamery od Tigera. Když kameru přitlačí zeď až k tělu, srst zabere
+   * celý obraz a všechny vrstvy by se překreslovaly přes sebe (nejdražší situace ve hře) –
+   * proto se zblízka postupně ubírají vnější vrstvy, až zbyde jen hladká srst základní sítě.
+   */
+  setViewDistance(d: number): void {
+    if (!this.shells) return;
+    const full = this.uniforms.furLayers.value as number;
+    const k = THREE.MathUtils.clamp((d - 0.2) / (0.62 - 0.2), 0, 1);
+    const layers = Math.round(full * k);
+    if (layers === this.lodLayers) return;
+    this.lodLayers = layers;
+    (this.shells.geometry as THREE.InstancedBufferGeometry).instanceCount = Math.max(1, layers);
+    this.shells.visible = this.enabled && layers > 0;
   }
 
   /** 0..1 – jak silně svítí tapetum (tma + světlo dopadající do očí). */

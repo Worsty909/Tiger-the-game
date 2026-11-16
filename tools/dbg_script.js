@@ -1,11 +1,20 @@
-const out = await page.evaluate(() => { const d = window.__tigerDebug; const g = d.game; d.setManual(true); d.simulate(0.3);
-  d.teleport(-0.72, 2.21, -2.33, Math.PI / 2); d.simulate(0.3);
-  const p = g.ctx.refs.pendant; const top = p.top;
-  const ok = d.jumpTo(top.x - 0.08, top.y, top.z - 0.05); d.simulate(1.0);
-  const log = [];
-  let maxV = 0, maxAng = 0, okCount = 0;
-  for (let i = 0; i < 180; i++) { d.simulate(1/30); const pv = g.cat.platformVelocity; const v = Math.hypot(pv.x, pv.z); maxV = Math.max(maxV, v); maxAng = Math.max(maxAng, Math.abs(p.angle));
-    const can = d.canReach(1.95, 2.25, -2.3); if (can) okCount++;
-    if (i % 12 === 0) log.push({ ang: +p.angle.toFixed(3), vel: +p.vel.toFixed(2), pv: [+pv.x.toFixed(2), +pv.y.toFixed(2), +pv.z.toFixed(2)], tag: g.cat.groundTag, pos: g.cat.position.toArray().map(v => +v.toFixed(2)), can }); }
-  return { ok, maxV, maxAng, okCount, swingDir: p.swingDir.toArray(), log }; });
-console.log(JSON.stringify(out, null, 0));
+const res = await page.evaluate(async () => {
+  const d = window.__tigerDebug; const g = d.game; const gl = g.gfx.renderer.getContext();
+  d.setManual(true);
+  d.teleport(-1.1, 0.02, -0.9, -1.75); d.look(-1.75, 0.02); d.simulate(1.5);
+  const px = new Uint8Array(4);
+  const sync = () => { gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); };
+  const time = () => { d.renderFrame(1 / 60); sync(); const t0 = performance.now(); for (let i = 0; i < 2; i++) { d.renderFrame(1 / 60); sync(); } return Math.round((performance.now() - t0) / 2); };
+  const P = g.gfx.composer.passes; const out = {};
+  out.passes = P.map((p) => p.constructor.name + (p.enabled ? '' : '(off)'));
+  out.base = time();
+  const toggle = (i, label) => { const was = P[i].enabled; P[i].enabled = false; out[label] = time(); P[i].enabled = was; };
+  toggle(2, 'bez AO'); toggle(3, 'bez volumetrik');
+  P[7].enabled = false; out['bez SMAA/vinětace/zrna'] = time(); P[7].enabled = true;
+  g.tiger.fur.setEnabled(false); out['bez srsti'] = time(); g.tiger.fur.setEnabled(true);
+  g.lighting.sun.castShadow = false; out['bez stínů slunce'] = time(); g.lighting.sun.castShadow = true;
+  const sc = g.gfx.scene; sc.overrideMaterial = new (Object.getPrototypeOf(g.ctx.mats.rubber).constructor)({ color: 0x888888 }); out['jednotný materiál (bez textur)'] = time(); sc.overrideMaterial = null;
+  out.calls = g.gfx.info.calls; out.tris = g.gfx.info.triangles;
+  return out;
+});
+console.log(JSON.stringify(res, null, 1));

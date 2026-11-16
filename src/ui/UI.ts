@@ -356,7 +356,7 @@ export class UI {
   }
 
   showCredits(stats: Stats): void {
-    const box = h('div', 'credits');
+    const box = h('div', 'credits-box');
     box.innerHTML = `
       <div class="credits-title">Tiger</div>
       <div class="credits-sub">Západ slunce. Plné břicho. Svět je zase v pořádku.</div>

@@ -427,7 +427,7 @@ function buildLock(ctx: WorldCtx, noMerge: THREE.Object3D[]): void {
   for (let d = 0; d < 10; d++) {
     dg.save();
     dg.translate(d * 102.4 + 51.2, 64);
-    dg.rotate(-Math.PI / 2);
+    dg.rotate(Math.PI / 2);
     dg.drawImage(src, d * 102.4, 0, 102.4, 128, -64, -51.2, 128, 102.4);
     dg.restore();
   }

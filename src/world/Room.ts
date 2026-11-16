@@ -237,7 +237,8 @@ function buildBalcony(ctx: WorldCtx): void {
   const rail = mats.blackMetal;
   const top = B.floorY + B.railH;
   const post = (x: number, z: number) => boxAt(g, rail, x, B.floorY + B.railH / 2, z, 0.04, B.railH, 0.04, 0.006);
-  const zs = [B.minZ + 0.02, (B.minZ + B.maxZ) / 2, B.maxZ - 0.02];
+  // mezisloupky jsou blíž k rohům: prostřední pole (1,6 m skla) nechává volný výhled na západ
+  const zs = [B.minZ + 0.02, B.minZ + 0.5, B.maxZ - 0.5, B.maxZ - 0.02];
   for (const z of zs) post(B.minX + 0.02, z);
   post(ROOM.minX - ROOM.wallT - 0.03, B.minZ + 0.02);
   post(ROOM.minX - ROOM.wallT - 0.03, B.maxZ - 0.02);
@@ -254,8 +255,7 @@ function buildBalcony(ctx: WorldCtx): void {
     p.renderOrder = 4;
     g.add(p);
   };
-  glassPanel(B.minX + 0.02, zs[0], B.minX + 0.02, zs[1]);
-  glassPanel(B.minX + 0.02, zs[1], B.minX + 0.02, zs[2]);
+  for (let i = 0; i < zs.length - 1; i++) glassPanel(B.minX + 0.02, zs[i], B.minX + 0.02, zs[i + 1]);
   glassPanel(B.minX + 0.02, B.minZ + 0.02, ROOM.minX - ROOM.wallT, B.minZ + 0.02);
   glassPanel(B.minX + 0.02, B.maxZ - 0.02, ROOM.minX - ROOM.wallT, B.maxZ - 0.02);
   // kolize zábradlí
@@ -264,12 +264,28 @@ function buildBalcony(ctx: WorldCtx): void {
   ph.addStaticAABB(B.minX, B.floorY, B.minZ - 0.02, ROOM.minX - ROOM.wallT, top + 0.6, B.minZ + 0.05, info, { camera: false });
   ph.addStaticAABB(B.minX, B.floorY, B.maxZ - 0.05, ROOM.minX - ROOM.wallT, top + 0.6, B.maxZ + 0.02, info, { camera: false });
 
-  // truhlík s bylinkami na zábradlí a skládací stolek
-  const planter = boxSpan(g, mats.plasticDark, B.minX + 0.07, top - 0.19, B.maxZ - 0.9, B.minX + 0.25, top - 0.03, B.maxZ - 0.15, 0.015);
+  // truhlík s bylinkami na zábradlí – u severního konce, mimo závěrečný záběr ze dveří
+  const pz0 = B.minZ + 0.1;
+  const pz1 = B.minZ + 0.56;
+  const planter = boxSpan(g, mats.plasticDark, B.minX + 0.07, top - 0.19, pz0, B.minX + 0.25, top - 0.03, pz1, 0.015);
   planter.castShadow = true;
-  const soil = boxSpan(g, new THREE.MeshStandardMaterial({ color: 0x2c2118, roughness: 1 }), B.minX + 0.085, top - 0.05, B.maxZ - 0.885, B.minX + 0.235, top - 0.04, B.maxZ - 0.165, 0.002);
+  const soil = boxSpan(g, new THREE.MeshStandardMaterial({ color: 0x2c2118, roughness: 1 }), B.minX + 0.085, top - 0.05, pz0 + 0.015, B.minX + 0.235, top - 0.04, pz1 - 0.015, 0.002);
   soil.castShadow = false;
-  ctx.refs.balconyPlanter = { x: B.minX + 0.16, y: top - 0.04, z0: B.maxZ - 0.87, z1: B.maxZ - 0.18 };
+  // bylinky: trsy lístků (nízkopolygonové, stačí siluetě proti obloze)
+  const herbGeo = new THREE.IcosahedronGeometry(1, 1);
+  const herbMats = [0x4f7a3a, 0x6a8f45, 0x3f6a3c].map((c) => new THREE.MeshStandardMaterial({ color: c, roughness: 0.9, flatShading: true }));
+  let seed = 11;
+  const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+  for (let i = 0; i < 9; i++) {
+    const h = new THREE.Mesh(herbGeo, herbMats[i % 3]);
+    const r = 0.035 + rnd() * 0.03;
+    h.scale.set(r * (0.9 + rnd() * 0.5), r * (1.2 + rnd() * 1.4), r * (0.9 + rnd() * 0.5));
+    h.position.set(B.minX + 0.16 + (rnd() - 0.5) * 0.07, top - 0.04 + h.scale.y * 0.8, pz0 + 0.05 + ((i + rnd() * 0.6) / 9) * (pz1 - pz0 - 0.1));
+    h.rotation.set(rnd() * 0.5, rnd() * 6.28, rnd() * 0.5);
+    h.castShadow = true;
+    g.add(h);
+  }
+  ctx.refs.balconyPlanter = { x: B.minX + 0.16, y: top - 0.04, z0: pz0 + 0.03, z1: pz1 - 0.03 };
 }
 
 function buildEntryDoor(ctx: WorldCtx): void {

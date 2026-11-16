@@ -3,7 +3,7 @@ import type { Game } from './Game';
 import { Save, type SaveData } from './Save';
 import { audio, type LoopHandle } from './Audio';
 import { bus } from './Events';
-import { BALCONY, BALCONY_DOOR, ROOM } from '../world/Layout';
+import { BALCONY, BALCONY_DOOR, ROOM, SUN_HEADING } from '../world/Layout';
 import { SUNSET_PHASE, OBSOLETE_AFTER } from '../puzzles/rooms/livingRoom';
 
 /**
@@ -22,6 +22,8 @@ export class Flow {
   private tickAcc = 0;
   private blink = 0;
   private menuT = 0;
+  /** Kde Tiger ve finále sedí: u zábradlí, kousek stranou od osy dveří (viz záběr ve `updateFinale`). */
+  private readonly finaleSpot = new THREE.Vector3(BALCONY.minX + 0.45, BALCONY.floorY, BALCONY_DOOR.z1 - 0.49);
 
   constructor(private game: Game) {
     bus.on('stepSolved', ({ id }) => this.onSolved(id));
@@ -53,9 +55,9 @@ export class Flow {
     const t = this.menuT;
     const a = Math.sin(t * 0.045) * 0.5;
     this.game.camera.cutToShot({
-      position: new THREE.Vector3(1.55 + Math.sin(a) * 0.5, 1.05 + Math.sin(t * 0.07) * 0.08, 2.0 - Math.cos(a) * 0.25),
-      target: new THREE.Vector3(-1.0, 0.62, 0.25),
-      fov: 42,
+      position: new THREE.Vector3(0.75 + Math.sin(a) * 0.45, 1.0 + Math.sin(t * 0.07) * 0.08, 2.25 - Math.cos(a) * 0.2),
+      target: new THREE.Vector3(-1.25, 0.66, 0.1),
+      fov: 44,
     });
   }
 
@@ -411,8 +413,8 @@ export class Flow {
     g.cat.inputLocked = true;
     g.cat.mode = 'scripted';
     g.cat.scriptSpeed = 0.55;
-    g.cat.scriptTarget = new THREE.Vector3(BALCONY.minX + 0.5, BALCONY.floorY, (BALCONY_DOOR.z0 + BALCONY_DOOR.z1) / 2 + 0.05);
-    g.cat.scriptYaw = -Math.PI / 2; // čelem k západu
+    g.cat.scriptTarget = this.finaleSpot.clone();
+    g.cat.scriptYaw = Math.atan2(-SUN_HEADING.x, -SUN_HEADING.z); // čelem ke slunci
     g.lighting.goToPhase(8, 34);
     audio.setMusicIntensity(1);
     this.city?.setVolume(1.6);
@@ -432,18 +434,27 @@ export class Flow {
       this.purr = audio.loop('purrLoop', cat, 0.9);
       g.ui.say(g.stats.golden ? 'Král výšek. A celé město mi leží u tlapek.' : 'Slunce zapadá. Břicho plné. Dobrý den.', 5);
     }
-    // kamera pomalu odjíždí dozadu a nahoru
-    const k = Math.min(1, t / 30);
+    // Kamera stojí ve dveřích a dívá se přímo na západ: Tiger sedí v pravé třetině obrazu,
+    // slunce zapadá za střechy ještě víc vpravo (vlevo je místo na titulky). Pomalu stoupá a couvá.
+    const k = Math.min(1, t / 32);
     const e = k * k * (3 - 2 * k);
+    const cz = BALCONY_DOOR.z1 - 0.35;
+    const cx = ROOM.minX - 0.12 + e * 0.07;
+    // ležící Tiger (zlatý pamlsek) je nižší → kamera níž a míň zvednutá, ať nezmizí pod okrajem
+    const lying = g.stats.golden;
+    const cy = (lying ? 0.17 : 0.3) + e * 0.06;
+    const rise = (lying ? 1.35 : 2.1) - e * 0.5;
     g.camera.setShot(
       {
-        position: new THREE.Vector3(cat.x + 0.7 + e * 2.3, cat.y + 0.3 + e * 0.75, cat.z + 0.38 - e * 0.25),
-        target: new THREE.Vector3(cat.x - 0.6 - e * 2.5, cat.y + 0.3 + e * 0.35, cat.z - 0.05),
-        fov: 46 - e * 8,
+        position: new THREE.Vector3(cx, cy, cz),
+        target: new THREE.Vector3(cx - 20, cy + rise, cz),
+        fov: 36,
       },
-      1.6,
+      1.4,
     );
-    g.gfx.setDof(true, cat.distanceTo(g.gfx.camera.position), 1.2 + e * 3, 2.2);
+    g.gfx.setDof(true, cat.distanceTo(g.gfx.camera.position), 1.5 + e * 6, 2.0);
+    // venku je mnohem víc světla než v pokoji → expozice dolů
+    g.lighting.exposureScale += (0.68 - g.lighting.exposureScale) * Math.min(1, dt * 0.9);
     if (t > 7 && !this.creditsShown) {
       this.creditsShown = true;
       g.ui.setHudVisible(false);
@@ -483,7 +494,7 @@ export class Flow {
     // blikající displej dávkovače
     const feeder = g.ctx.refs.feeder;
     this.blink += dt;
-    const on = feeder.error ? this.blink % 1.1 < 0.65 : false;
+    const on = feeder.error ? this.blink % 1.2 < 0.85 : false;
     const tex = on ? feeder.texOn : feeder.texOff;
     if (feeder.dispMat.map !== tex) {
       feeder.dispMat.map = tex;

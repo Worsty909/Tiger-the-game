@@ -376,7 +376,7 @@ async function placeSofa(ctx: WorldCtx): Promise<void> {
   ph.addStaticAABB(cx + hw - 0.17, seatU, cz - 0.28, cx + hw, 0.63, cz + hd - 0.02, fab);
   ph.addStaticAABB(cx - hw + 0.02, seatU, cz - hd, cx + hw - 0.02, 0.9, cz - 0.2, fab);
   // hřeben opěradla – úzká vyřezávaná lišta, na které se nedá stát
-  ph.addStaticAABB(cx - hw + 0.05, 0.9, cz - hd + 0.04, cx + hw - 0.05, b.max.y - 0.02, cz - 0.26, { surface: 'wood', tag: 'noStand' });
+  ph.addStaticAABB(cx - hw, 0.88, cz - hd - 0.01, cx + hw, b.max.y - 0.02, cz - 0.19, { surface: 'wood', tag: 'noStand' });
   ctx.refs.sofa = {
     model, cx, cz, hw, hd, seatY: S.seatH,
     underMin: new THREE.Vector3(cx - hw + 0.1, 0, cz - hd + 0.1),

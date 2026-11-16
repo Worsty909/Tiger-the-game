@@ -31,7 +31,7 @@ export const BALCONY_DOOR = {
   y0: 0.03,
   head: 2.25,
   ajarAngle: 0.105, // ~6° – štěrbina ~9 cm, kočka neprojde
-  openAngle: 1.35,
+  openAngle: 1.75,
 } as const;
 
 export const BALCONY = {

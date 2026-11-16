@@ -29,16 +29,16 @@ export interface PhaseDef {
 }
 
 export const PHASES: PhaseDef[] = [
-  { elev: 10.0, kelvin: 4500, sun: 11.0, skyMix: 0.0, skyExp: 1.0, exposure: 3.5, floorLamp: 0, pendant: 0, strip: 0, city: 0 },
-  { elev: 8.6, kelvin: 4200, sun: 10.4, skyMix: 0.0, skyExp: 0.97, exposure: 3.55, floorLamp: 0, pendant: 0, strip: 0, city: 0 },
-  { elev: 7.2, kelvin: 3850, sun: 9.6, skyMix: 0.05, skyExp: 0.93, exposure: 3.6, floorLamp: 0, pendant: 0, strip: 0, city: 0 },
-  { elev: 5.8, kelvin: 3450, sun: 8.6, skyMix: 0.15, skyExp: 0.88, exposure: 3.7, floorLamp: 0.35, pendant: 0, strip: 0, city: 0.05 },
-  { elev: 4.5, kelvin: 3000, sun: 7.3, skyMix: 0.3, skyExp: 0.82, exposure: 3.9, floorLamp: 0.6, pendant: 0, strip: 0.4, city: 0.15 },
-  { elev: 3.2, kelvin: 2500, sun: 5.6, skyMix: 0.5, skyExp: 0.74, exposure: 4.2, floorLamp: 0.8, pendant: 0, strip: 0.7, city: 0.3 },
-  { elev: 2.0, kelvin: 2150, sun: 3.6, skyMix: 0.75, skyExp: 0.64, exposure: 4.6, floorLamp: 1, pendant: 0.6, strip: 1, city: 0.5 },
-  { elev: 0.9, kelvin: 1900, sun: 1.9, skyMix: 1.0, skyExp: 0.55, exposure: 5.2, floorLamp: 1, pendant: 1, strip: 1, city: 0.7 },
-  // finále – modrá hodinka (během závěrečných titulků)
-  { elev: -5.0, kelvin: 1800, sun: 0.0, skyMix: 2.0, skyExp: 0.2, exposure: 6.5, floorLamp: 1, pendant: 1, strip: 1, city: 1 },
+  { elev: 13.0, kelvin: 4500, sun: 6.8, skyMix: 0.0, skyExp: 1.55, exposure: 3.1, floorLamp: 0, pendant: 0, strip: 0, city: 0 },
+  { elev: 11.8, kelvin: 4200, sun: 6.5, skyMix: 0.0, skyExp: 1.5, exposure: 3.1, floorLamp: 0, pendant: 0, strip: 0, city: 0 },
+  { elev: 10.6, kelvin: 3850, sun: 6.1, skyMix: 0.05, skyExp: 1.45, exposure: 3.0, floorLamp: 0, pendant: 0, strip: 0, city: 0 },
+  { elev: 9.4, kelvin: 3450, sun: 5.6, skyMix: 0.15, skyExp: 1.3, exposure: 2.85, floorLamp: 0.35, pendant: 0, strip: 0, city: 0.05 },
+  { elev: 8.3, kelvin: 3000, sun: 4.9, skyMix: 0.3, skyExp: 1.1, exposure: 2.6, floorLamp: 0.6, pendant: 0, strip: 0.4, city: 0.15 },
+  { elev: 7.3, kelvin: 2500, sun: 3.9, skyMix: 0.5, skyExp: 0.9, exposure: 2.35, floorLamp: 0.8, pendant: 0, strip: 0.7, city: 0.3 },
+  { elev: 6.4, kelvin: 2150, sun: 2.7, skyMix: 0.75, skyExp: 0.58, exposure: 2.1, floorLamp: 1, pendant: 0.6, strip: 1, city: 0.5 },
+  { elev: 5.6, kelvin: 1900, sun: 1.5, skyMix: 1.0, skyExp: 0.38, exposure: 1.9, floorLamp: 1, pendant: 1, strip: 1, city: 0.7 },
+  // finále – slunce zapadne za střechy a přijde modrá hodinka (během závěrečných titulků)
+  { elev: -5.0, kelvin: 1800, sun: 0.0, skyMix: 2.0, skyExp: 0.22, exposure: 2.3, floorLamp: 1, pendant: 1, strip: 1, city: 1 },
 ];
 
 export function kelvinToColor(k: number, target = new THREE.Color()): THREE.Color {
@@ -123,6 +123,9 @@ export class Lighting {
   readonly hideOnBake: THREE.Object3D[] = [];
   /** 0..1 – jak moc je scéna „ve tmě“ (pro noční vidění a tapetum). */
   darkness = 0;
+  /** Násobitel expozice (venku je mnohem víc světla než v pokoji). */
+  exposureScale = 1;
+  private lampFrame = 0;
   /** Zisk vyvážení bílé pro grading. */
   readonly whiteBalance = new THREE.Vector3(1, 1, 1);
 
@@ -167,6 +170,8 @@ export class Lighting {
     this.floorLamp.shadow.bias = -0.002;
     this.floorLamp.shadow.camera.near = 0.2;
     this.floorLamp.shadow.camera.far = 7;
+    // bodové světlo = 6 stínových průchodů; lampa i většina scény stojí, takže stačí každý 4. snímek
+    this.floorLamp.shadow.autoUpdate = false;
     this.floorLamp.visible = false;
     ctx.scene.add(this.floorLamp);
 
@@ -258,6 +263,7 @@ export class Lighting {
   }
 
   update(dt: number): void {
+    if (this.floorLamp.castShadow && this.floorLamp.visible && (this.lampFrame++ & 3) === 0) this.floorLamp.shadow.needsUpdate = true;
     if (this.t < 1) {
       this.t = Math.min(1, this.t + dt / this.duration);
       const e = this.t * this.t * (3 - 2 * this.t);
@@ -289,6 +295,9 @@ export class Lighting {
     const glow = this.sunColor.clone().lerp(new THREE.Color(1.0, 0.35, 0.12), THREE.MathUtils.clamp(1 - p.elev / 6, 0, 1) * 0.6);
     this.sky.set(p.skyMix, p.skyExp, this.toSun, p.elev, glow, THREE.MathUtils.smoothstep(p.elev, -1.5, 0.5));
     this.sky.setCityLights(p.city);
+    // teplý nádech oblohy kolem západu (HDRI samo je spíš růžovobílé), po západu zase vyprchá
+    const warmth = THREE.MathUtils.clamp((4500 - p.kelvin) / 2000, 0, 1) * horizonFade;
+    this.sky.uniforms.tint.value.setRGB(1, THREE.MathUtils.lerp(1, 0.74, warmth * 0.8), THREE.MathUtils.lerp(1, 0.5, warmth * 0.8));
 
     const hasGrid = this.grid !== null;
     this.fill.intensity = hasGrid ? 0 : 0.35 * p.skyExp;
@@ -297,22 +306,25 @@ export class Lighting {
 
     // lampy
     const refs = this.ctx.refs;
-    this.floorLamp.intensity = 4.2 * p.floorLamp;
+    this.floorLamp.intensity = 6.5 * p.floorLamp;
     this.floorLamp.visible = p.floorLamp > 0.01;
     if (refs.floorLamp) {
-      refs.floorLamp.shadeMat.emissiveIntensity = 0.9 * p.floorLamp;
+      refs.floorLamp.shadeMat.emissiveIntensity = 1.5 * p.floorLamp;
       refs.floorLamp.bulbMat.emissiveIntensity = 14 * p.floorLamp;
     }
-    this.pendantLight.intensity = 26 * p.pendant;
+    this.pendantLight.intensity = 34 * p.pendant;
     this.pendantLight.visible = p.pendant > 0.01;
-    if (refs.pendant) refs.pendant.diffMat.emissiveIntensity = 9 * p.pendant;
+    if (refs.pendant) refs.pendant.diffMat.emissiveIntensity = 14 * p.pendant;
     this.strip.intensity = 14 * p.strip;
     this.strip.visible = p.strip > 0.01;
     if (refs.stripMat) refs.stripMat.emissiveIntensity = 10 * p.strip;
     if (refs.hoodLed) refs.hoodLed.material.emissiveIntensity = 0;
 
-    // částečné vyvážení bílé: kompenzuje ~55 % barevného nádechu slunce
-    const wbK = 0.7;
+    // částečné vyvážení bílé: kompenzuje nádech slunce jen do té míry, do jaké slunce scéně dominuje
+    // (po setmění převládá chladná obloha a lampy – tam by kompenzace udělala obraz tyrkysový)
+    const dominance = Math.pow(THREE.MathUtils.clamp((p.sun * horizonFade) / 6.8, 0, 1), 0.7);
+    // čím teplejší (nižší) barevná teplota, tím méně se kompenzuje – západ má zůstat oranžový
+    const wbK = 0.62 * dominance * THREE.MathUtils.clamp((p.kelvin - 2000) / 2500, 0.12, 1);
     const sc = this.sunColor;
     const mean = (sc.r + sc.g + sc.b) / 3;
     this.whiteBalance.set(
@@ -322,7 +334,7 @@ export class Lighting {
     );
     this.sky.uniforms.saturation.value = THREE.MathUtils.clamp(0.5 + (4500 - p.kelvin) / 4000, 0.5, 1);
 
-    this.darkness = THREE.MathUtils.clamp(1 - (p.sun * horizonFade) / 6 - p.skyExp * 0.3, 0, 1);
+    this.darkness = THREE.MathUtils.clamp(1 - (p.sun * horizonFade) / 4 - p.skyExp * 0.22, 0, 1);
   }
 
   // ------------------------------------------------------------------ GI + odrazy

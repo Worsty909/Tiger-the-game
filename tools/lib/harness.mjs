@@ -35,9 +35,14 @@ export async function startServer() {
  * Otevře hru a počká na načtení.
  * @returns {{ page, browser, logs: {errors: string[], warnings: string[]}, close: () => Promise<void> }}
  */
-export async function openGame(url, { quality = 'low', width = 1280, height = 720, params = '', timeout = 600000, scale = 1 } = {}) {
+export async function openGame(url, { quality = 'low', width = 1280, height = 720, params = '', timeout = 1200000, scale = 1, test = true } = {}) {
+  // Výchozí je softwarový rasterizér (funguje všude, i v CI). TIGER_GPU=1 použije skutečnou grafickou kartu.
+  const gpu = !!process.env.TIGER_GPU;
   const browser = await chromium.launch({
-    args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'],
+    headless: !process.env.TIGER_HEADED,
+    args: gpu
+      ? ['--ignore-gpu-blocklist', '--enable-gpu', '--use-angle=default', '--disable-gpu-vsync', '--disable-frame-rate-limit', '--autoplay-policy=no-user-gesture-required']
+      : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--autoplay-policy=no-user-gesture-required'],
   });
   const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: scale });
   const page = await context.newPage();
@@ -49,7 +54,8 @@ export async function openGame(url, { quality = 'low', width = 1280, height = 72
   });
   page.on('pageerror', (err) => logs.errors.push('pageerror: ' + err.message));
   page.on('requestfailed', (req) => logs.errors.push('requestfailed: ' + req.url()));
-  await page.goto(`${url}?quality=${quality}&test=1${params ? '&' + params : ''}`);
+  const q = [`quality=${quality}`, test && !params.includes('test=1') ? 'test=1' : '', params].filter(Boolean).join('&');
+  await page.goto(`${url}?${q}`);
   await page.waitForFunction(() => window.__tigerDebug && window.__tigerDebug.ready, null, { timeout });
   return { page, browser, logs, close: () => browser.close() };
 }

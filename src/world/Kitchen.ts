@@ -108,7 +108,7 @@ export function buildKitchen(ctx: WorldCtx): void {
   cab.add(doorPivot);
   const dw = K.upperX1 - K.upperX0 - 0.004;
   boxSpan(doorPivot, mats.cabinet, 0, K.upperY0 + 0.002, 0.002, dw, K.upperY1 - 0.002, 0.002 + ft, 0.004);
-  handle(doorPivot, dw - 0.05, K.upperY0 + 0.16, 0.002 + ft, 0.2, 'y', [0, 0, 1]);
+  handle(doorPivot, dw - 0.05, K.upperY0 + 0.34, 0.002 + ft, 0.2, 'y', [0, 0, 1]);
   const door: Hinged = { pivot: doorPivot, body: null, angle: 0, target: 0, speed: 0 };
   ctx.refs.treatDoor = door;
   ctx.refs.treatCabinet = {

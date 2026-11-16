@@ -268,7 +268,7 @@ export const lockStep: StepDef = {
       while (d > Math.PI) d -= Math.PI * 2;
       while (d < -Math.PI) d += Math.PI * 2;
       lock.angles[i] += d * Math.min(1, dt * 14);
-      lock.wheels[i].rotation.x = lock.angles[i] + Math.PI * 0.5;
+      lock.wheels[i].rotation.x = lock.angles[i] + Math.PI * 0.1;
     }
     // uražený Tiger: 8 s si olizuje tlapku
     if (st.sulk > 0) {

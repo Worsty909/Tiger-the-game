@@ -26,6 +26,8 @@ import type { PuzzleCtx, GameStats } from '../puzzles/PuzzleCtx';
 import { livingRoomSteps } from '../puzzles/rooms/livingRoom';
 import { setKittenPhoto } from '../puzzles/steps/05_photo';
 
+const _furC = new THREE.Vector3();
+
 export type GameState = 'loading' | 'menu' | 'intro' | 'playing' | 'paused' | 'finale';
 export type ModalEvent = 'up' | 'down' | 'left' | 'right' | 'confirm' | 'back';
 
@@ -60,7 +62,7 @@ export class Game {
   /** Když je nastaven, směrové klávesy a potvrzení jdou sem (kódový zámek). */
   modalHandler: ((ev: ModalEvent) => void) | null = null;
   /** Hustota „vzduchu“ pro volumetrické paprsky. */
-  volumetricDensity = 0.018;
+  volumetricDensity = 0.014;
   /** Když je true, smyčka nerenderuje (testy řídí kroky ručně). */
   manualStepping = false;
   readonly errors: string[] = [];
@@ -404,7 +406,10 @@ export class Game {
     this.ui.setSenses(this.senses.amount);
     // tapetum lucidum: ve tmě oči svítí, nejvíc v nočním vidění
     this.tiger.fur.setTapetum(Math.min(1, this.senses.nightVision * 0.9 + L.darkness * 0.35));
-    this.gfx.setExposure(L.state.exposure * (1 + this.senses.nightVision * 0.6));
+    _furC.copy(this.cat.position);
+    _furC.y += 0.2;
+    this.tiger.fur.setViewDistance(this.gfx.camera.position.distanceTo(_furC));
+    this.gfx.setExposure(L.state.exposure * L.exposureScale * (1 + this.senses.nightVision * 0.6));
     this.gfx.setVolumetric(L.sun, L.toSun, this.volumetricDensity);
     const wb = L.whiteBalance;
     this.gfx.setWhiteBalance(wb.x, wb.y, wb.z);

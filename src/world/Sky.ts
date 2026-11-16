@@ -92,8 +92,8 @@ export class Sky {
           col = mix(vec3(dot(col, vec3(0.2126, 0.7152, 0.0722))), col, saturation);
           // vlastní sluneční kotouč a záře (HDRI má slunce jen v jedné výšce)
           float cosA = dot(d, normalize(sunDir));
-          float disk = smoothstep(0.99990, 0.99997, cosA);
-          float halo = pow(max(cosA, 0.0), 180.0) * 2.5 + pow(max(cosA, 0.0), 14.0) * 0.35;
+          float disk = smoothstep(0.99978, 0.99990, cosA); // ~1,6° – nízké slunce působí větší
+          float halo = pow(max(cosA, 0.0), 1400.0) * 9.0 + pow(max(cosA, 0.0), 160.0) * 2.6 + pow(max(cosA, 0.0), 14.0) * 0.4;
           col += sunGlow * (disk * 60.0 + halo) * sunGlowAmount;
           if (elev < 0.0) col *= mix(1.0, 0.25, smoothstep(0.0, -0.25, elev));
           gl_FragColor = vec4(col * tint * exposure, 1.0);

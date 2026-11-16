@@ -230,7 +230,7 @@ body {
 .lock-ui {
   position: absolute;
   left: 50%;
-  bottom: 7%;
+  bottom: 17%;
   transform: translateX(-50%);
   text-align: center;
   opacity: 0;
@@ -559,14 +559,26 @@ canvas.journal-thumb {
   font-size: 16px;
 }
 .overlay.credits {
-  background: linear-gradient(180deg, rgba(8, 7, 6, 0.1) 0%, rgba(8, 7, 6, 0.72) 100%);
-  place-items: end center;
+  /* titulky vlevo, pravé dvě pětiny obrazu patří Tigerovi a západu slunce */
+  background: linear-gradient(90deg, rgba(8, 7, 6, 0.8) 0%, rgba(8, 7, 6, 0.55) 36%, rgba(8, 7, 6, 0) 64%);
+  place-items: center start;
 }
-.credits {
-  width: min(720px, 92vw);
+.credits-box {
+  margin-left: clamp(18px, 4vw, 80px);
+  width: min(560px, 48vw);
   text-align: center;
-  padding-bottom: 5vh;
   animation: creditsIn 2.5s ease both;
+}
+@media (max-width: 820px) {
+  .overlay.credits {
+    background: linear-gradient(180deg, rgba(8, 7, 6, 0.15) 0%, rgba(8, 7, 6, 0.75) 100%);
+    place-items: end center;
+  }
+  .credits-box {
+    margin-left: 0;
+    width: 92vw;
+    padding-bottom: 4vh;
+  }
 }
 @keyframes creditsIn {
   from {
@@ -624,7 +636,7 @@ canvas.journal-thumb {
   font-weight: 500;
   letter-spacing: 0.08em;
 }
-.credits .menu-btn {
+.credits-box .menu-btn {
   margin-top: 10px;
   border: 1px solid var(--line);
   border-radius: 999px;
