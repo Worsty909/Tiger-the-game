@@ -35,12 +35,12 @@ export const QUALITY: Record<QualityName, QualityPreset> = {
   },
   high: {
     label: 'Vysoká', pixelRatio: 1, shadowMap: 4096, shadowRadius: 3, ao: 'medium', aoHalfRes: true,
-    volumetricSteps: 20, bloom: true, smaa: true, furLayers: 24, dust: 600, gi: 'full', giBounces: 2,
-    lampShadows: true, anisotropy: 8, envSize: 256, city: 1,
+    volumetricSteps: 20, bloom: true, smaa: true, furLayers: 24, dust: 600, gi: 'coarse', giBounces: 1,
+    lampShadows: false, anisotropy: 8, envSize: 256, city: 1,
   },
   ultra: {
     label: 'Ultra', pixelRatio: 1.5, shadowMap: 4096, shadowRadius: 3.5, ao: 'high', aoHalfRes: false,
-    volumetricSteps: 32, bloom: true, smaa: true, furLayers: 32, dust: 900, gi: 'full', giBounces: 3,
+    volumetricSteps: 32, bloom: true, smaa: true, furLayers: 32, dust: 900, gi: 'full', giBounces: 2,
     lampShadows: true, anisotropy: 16, envSize: 256, city: 1,
   },
 };

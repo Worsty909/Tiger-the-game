@@ -42,6 +42,8 @@ const X = new THREE.Vector3(1, 0, 0);
 const Y = new THREE.Vector3(0, 1, 0);
 
 const damp = (cur: number, target: number, rate: number, dt: number) => cur + (target - cur) * (1 - Math.exp(-rate * dt));
+/** Nejdelší krok integrace pružin (dip po dopadu, ocas). */
+const SPRING_STEP = 1 / 120;
 const smooth = (t: number) => t * t * (3 - 2 * t);
 const clamp = THREE.MathUtils.clamp;
 const frac = (v: number) => v - Math.floor(v);
@@ -232,9 +234,14 @@ export class CatAnimator {
       this.snapFeet();
     }
     this.wasAir = inAir;
-    this.dipVel += (-this.dip * 190 - this.dipVel * 17) * dt;
-    this.dip += this.dipVel * dt;
-    this.dip = clamp(this.dip, -0.09, 0.03);
+    // Pružiny se integrují po malých krocích: při pomalých snímcích (dt až 0,1 s) by jeden velký
+    // krok kmital a tělo by se samo přikrčovalo a zase narovnávalo.
+    const sub = Math.max(1, Math.ceil(dt / SPRING_STEP));
+    const h = dt / sub;
+    for (let i = 0; i < sub; i++) {
+      this.dipVel += (-this.dip * 190 - this.dipVel * 17) * h;
+      this.dip = clamp(this.dip + this.dipVel * h, -0.09, 0.03);
+    }
 
     // --- krokový cyklus
     const freq = 1.15 + 0.78 * speed;
@@ -659,6 +666,8 @@ export class CatAnimator {
     }
     const k = 70;
     const cdamp = 9;
+    const sub = Math.max(1, Math.ceil(dt / SPRING_STEP));
+    const h = dt / sub;
     for (let i = 0; i < n; i++) {
       const w = (i + 1) / n;
       const tp = (pitchTotal / n) * (1.5 - w) * 1.2 + (curl / n) * w * 2.2 * (i > n / 2 ? 1 : 0.2);
@@ -666,10 +675,12 @@ export class CatAnimator {
       // setrvačnost: při otáčení těla se ocas opožďuje
       const inertiaY = -this.yawRate * 0.9 * w;
       const inertiaP = -this.dipVel * 2.5 * w;
-      this.tailYawV[i] += ((ty - this.tailYaw[i]) * k - this.tailYawV[i] * cdamp + inertiaY * 6) * dt;
-      this.tailPitchV[i] += ((tp - this.tailPitch[i]) * k - this.tailPitchV[i] * cdamp + inertiaP * 6) * dt;
-      this.tailYaw[i] = clamp(this.tailYaw[i] + this.tailYawV[i] * dt, -0.9, 0.9);
-      this.tailPitch[i] = clamp(this.tailPitch[i] + this.tailPitchV[i] * dt, -0.8, 0.8);
+      for (let s = 0; s < sub; s++) {
+        this.tailYawV[i] += ((ty - this.tailYaw[i]) * k - this.tailYawV[i] * cdamp + inertiaY * 6) * h;
+        this.tailPitchV[i] += ((tp - this.tailPitch[i]) * k - this.tailPitchV[i] * cdamp + inertiaP * 6) * h;
+        this.tailYaw[i] = clamp(this.tailYaw[i] + this.tailYawV[i] * h, -0.9, 0.9);
+        this.tailPitch[i] = clamp(this.tailPitch[i] + this.tailPitchV[i] * h, -0.8, 0.8);
+      }
       _q.setFromAxisAngle(X, this.tailPitch[i]);
       _q2.setFromAxisAngle(Y, this.tailYaw[i]);
       _q2.multiply(_q);

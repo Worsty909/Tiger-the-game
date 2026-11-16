@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { LightProbeGridWebGL } from 'three/addons/lighting/LightProbeGridWebGL.js';
-import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
 import { settings } from '../core/Settings';
 import { bus } from '../core/Events';
 import type { WorldCtx } from './Ctx';
@@ -104,7 +103,7 @@ export class Lighting {
   private ambient: THREE.AmbientLight;
   private floorLamp: THREE.PointLight;
   private pendantLight: THREE.SpotLight;
-  private strip: THREE.RectAreaLight;
+  private strip: THREE.SpotLight;
   /** Dvě mřížky sond: přední svítí, do zadní se zapéká; po dokončení se prohodí (bez probliknutí). */
   private grid: LightProbeGridWebGL | null = null;
   private gridBack: LightProbeGridWebGL | null = null;
@@ -113,12 +112,19 @@ export class Lighting {
   private bakeCursor = 0;
   private bakePass = 0;
   private bakePassesWanted = 0;
-  private bakeQueued = false;
+  /** Podpis stavu světla, pro který platí zapečené GI a odrazová mapa. */
+  private bakedSig = '';
+  /** Podpis stavu, pro který se právě zapéká. */
+  private bakeSig = '';
+  /** Klouzavý průměr času CPU na jednu sondu (ms) – podle něj se volí počet sond na snímek. */
+  private probeMs = 3;
   private pmrem: THREE.PMREMGenerator;
   private cubeRT: THREE.WebGLCubeRenderTarget;
   private cubeCam: THREE.CubeCamera;
-  private envRT: THREE.WebGLRenderTarget | null = null;
-  private envDirty = 0;
+  private envRT: ReturnType<THREE.PMREMGenerator['fromCubemap']> | null = null;
+  /** Odrazová sonda se obnovuje po částech: -1 = klid, 0..5 = stěna krychle, 6 = filtrace. */
+  private envFace = -1;
+  private envWanted = false;
   /** Objekty skryté při zapékání (kočka, srst, částice…). */
   readonly hideOnBake: THREE.Object3D[] = [];
   /** 0..1 – jak moc je scéna „ve tmě“ (pro noční vidění a tapetum). */
@@ -170,9 +176,11 @@ export class Lighting {
     this.floorLamp.shadow.bias = -0.002;
     this.floorLamp.shadow.camera.near = 0.2;
     this.floorLamp.shadow.camera.far = 7;
-    // bodové světlo = 6 stínových průchodů; lampa i většina scény stojí, takže stačí každý 4. snímek
+    // bodové světlo = 6 stínových průchodů → obnovuje se ručně (viz update), jen když lampa svítí
     this.floorLamp.shadow.autoUpdate = false;
-    this.floorLamp.visible = false;
+    this.floorLamp.shadow.needsUpdate = true;
+    // Všechna světla jsou ve scéně pořád (zhasnutá mají intenzitu 0). Kdyby se zapínala přes
+    // `visible`, změnil by se počet světel a three.js by uprostřed hry překompilovával všechny shadery.
     ctx.scene.add(this.floorLamp);
 
     // závěsné svítidlo nad poloostrovem (svítí dolů, houpe se s ním)
@@ -187,16 +195,15 @@ export class Lighting {
       this.pendantLight.position.set(PENDANT.x, PENDANT.topY - 0.1, PENDANT.z);
       ctx.scene.add(this.pendantLight);
     }
-    this.pendantLight.visible = false;
 
-    // LED pásek pod horní skříňkou (podsvícení linky)
-    RectAreaLightUniformsLib.init();
+    // LED pásek pod horní skříňkou (podsvícení linky): široký kužel dolů na pracovní desku
+    // (plošné světlo by stálo dvě textury a integraci v každém pixelu všech materiálů)
     const sw = KITCHEN.upperX1 - KITCHEN.upperX0 - 0.06;
-    this.strip = new THREE.RectAreaLight(0xffe6c4, 0, sw, 0.03);
+    this.strip = new THREE.SpotLight(0xffe6c4, 0, 2.2, 1.25, 1, 2);
     this.strip.position.set((KITCHEN.upperX0 + KITCHEN.upperX1) / 2, KITCHEN.upperY0 - 0.004, ROOM.minZ + 0.22);
-    this.strip.rotation.x = -Math.PI / 2;
-    this.strip.visible = false;
+    this.strip.target.position.set(this.strip.position.x, 0, this.strip.position.z + 0.08);
     ctx.scene.add(this.strip);
+    ctx.scene.add(this.strip.target);
     const stripMat = new THREE.MeshStandardMaterial({ color: 0x222222, emissive: 0xffe2bd, emissiveIntensity: 0 });
     const stripMesh = new THREE.Mesh(new THREE.PlaneGeometry(sw, 0.012), stripMat);
     stripMesh.rotation.x = Math.PI / 2;
@@ -217,7 +224,8 @@ export class Lighting {
     const gi = (url.get('gi') as typeof q.gi | null) ?? q.gi;
     if (url.has('bounces')) this.bounces = Number(url.get('bounces'));
     if (gi !== 'off') {
-      const res = gi === 'full' ? [13, 6, 11] : [9, 4, 7];
+      // hrubá = 252 sond, plná = 495; víc sond znamená hlavně pomalejší přepočet při změně fáze
+      const res = gi === 'full' ? [11, 5, 9] : [9, 4, 7];
       const make = (priority: number) => {
         const grid = new LightProbeGridWebGL(ROOM.maxX - ROOM.minX, ROOM.h, ROOM.maxZ - ROOM.minZ, res[0], res[1], res[2]);
         grid.position.set(0, ROOM.h / 2, 0);
@@ -242,7 +250,6 @@ export class Lighting {
     this.from = this.to = { ...PHASES[this.phase] };
     this.t = 1;
     this.apply(this.to);
-    this.requestBake();
     bus.emit('sunsetPhase', { phase: this.phase });
   }
 
@@ -263,14 +270,11 @@ export class Lighting {
   }
 
   update(dt: number): void {
-    if (this.floorLamp.castShadow && this.floorLamp.visible && (this.lampFrame++ & 3) === 0) this.floorLamp.shadow.needsUpdate = true;
+    if (this.floorLamp.castShadow && this.floorLamp.intensity > 0.01 && (this.lampFrame++ & 1) === 0) this.floorLamp.shadow.needsUpdate = true;
     if (this.t < 1) {
       this.t = Math.min(1, this.t + dt / this.duration);
       const e = this.t * this.t * (3 - 2 * this.t);
       this.apply(lerpPhase(this.from, this.to, e));
-      this.envDirty += dt;
-      if (this.t >= 1) this.requestBake();
-      else if (this.envDirty > 1.2) this.requestBake();
     }
   }
 
@@ -286,7 +290,6 @@ export class Lighting {
     const horizonFade = THREE.MathUtils.smoothstep(p.elev, -0.6, 1.2);
     this.sun.color.copy(this.sunColor);
     this.sun.intensity = p.sun * horizonFade;
-    this.sun.visible = this.sun.intensity > 0.01;
     // u velmi nízkého slunce držíme stínovou kameru nad obzorem (jinak by stíny byly nekonečné)
     const shadowEl = Math.max(el, THREE.MathUtils.degToRad(1.2));
     const sd = new THREE.Vector3((SUN_HEADING.x / hl) * Math.cos(shadowEl), -Math.sin(shadowEl), (SUN_HEADING.z / hl) * Math.cos(shadowEl)).normalize();
@@ -307,16 +310,13 @@ export class Lighting {
     // lampy
     const refs = this.ctx.refs;
     this.floorLamp.intensity = 6.5 * p.floorLamp;
-    this.floorLamp.visible = p.floorLamp > 0.01;
     if (refs.floorLamp) {
       refs.floorLamp.shadeMat.emissiveIntensity = 1.5 * p.floorLamp;
       refs.floorLamp.bulbMat.emissiveIntensity = 14 * p.floorLamp;
     }
     this.pendantLight.intensity = 34 * p.pendant;
-    this.pendantLight.visible = p.pendant > 0.01;
     if (refs.pendant) refs.pendant.diffMat.emissiveIntensity = 14 * p.pendant;
-    this.strip.intensity = 14 * p.strip;
-    this.strip.visible = p.strip > 0.01;
+    this.strip.intensity = 0.55 * p.strip;
     if (refs.stripMat) refs.stripMat.emissiveIntensity = 10 * p.strip;
     if (refs.hoodLed) refs.hoodLed.material.emissiveIntensity = 0;
 
@@ -339,14 +339,18 @@ export class Lighting {
 
   // ------------------------------------------------------------------ GI + odrazy
 
-  /** Naplánuje přepočet sond a odrazové mapy (inkrementálně v dalších snímcích). */
+  /** Podpis stavu světla: podle něj se pozná, jestli zapečené GI ještě odpovídá. */
+  private signature(p: PhaseDef): string {
+    return [p.elev.toFixed(1), Math.round(p.kelvin / 25), p.sun.toFixed(2), p.skyMix.toFixed(2), p.skyExp.toFixed(2), p.floorLamp.toFixed(2), p.pendant.toFixed(2), p.strip.toFixed(2)].join('|');
+  }
+
+  /** Vynutí přepočet sond a odrazové mapy (inkrementálně v dalších snímcích). */
   requestBake(): void {
-    this.envDirty = 0;
-    this.bakeQueued = true;
+    this.bakedSig = '';
   }
 
   get baking(): boolean {
-    return this.bakeQueued || this.bakePassesWanted > 0;
+    return this.bakePassesWanted > 0 || this.envWanted || this.envFace >= 0 || this.signature(this.state) !== this.bakedSig;
   }
 
   private setHidden(hidden: boolean): void {
@@ -354,14 +358,21 @@ export class Lighting {
     for (const o of this.hideOnBake) o.visible = !hidden;
   }
 
-  private bakeRange(grid: LightProbeGridWebGL, start: number, count: number, pass: number): void {
+  /**
+   * Zapeče rozsah sond. `reuseShadows`: za běhu se stínová mapa slunce znovu nekreslí – použije se
+   * ta z posledního snímku (jinak by se stíny celé scény kreslily v každém snímku dvakrát).
+   */
+  private bakeRange(grid: LightProbeGridWebGL, start: number, count: number, pass: number, reuseShadows = false): void {
     // během zapékání musí „vyhrát“ zapékaná mřížka (odrazy čtou její předchozí průchod)
     const prev = grid.priority;
     grid.priority = 10;
     this.setHidden(true);
+    const sunAuto = this.sun.shadow.autoUpdate;
+    if (reuseShadows) this.sun.shadow.autoUpdate = false;
     try {
       grid.bake(this.renderer, this.ctx.scene, { cubemapSize: 8, near: 0.04, far: 1200, start, count, pass });
     } finally {
+      this.sun.shadow.autoUpdate = sunAuto;
       this.setHidden(false);
       grid.priority = prev;
     }
@@ -388,25 +399,43 @@ export class Lighting {
       this.bakeRange(this.gridBack, 0, 1, 0);
     }
     this.updateEnvironment();
-    this.bakeQueued = false;
+    this.bakedSig = this.signature(this.state);
     this.bakePassesWanted = 0;
+    this.envWanted = false;
+    this.envFace = -1;
   }
 
-  /** Inkrementální přepočet do zadní mřížky – volat každý snímek s rozpočtem sond. */
-  bakeStep(budget = 24): void {
-    if (this.bakeQueued && this.bakePassesWanted === 0) {
-      this.bakeQueued = false;
-      if (this.gridBack) {
-        this.bakePassesWanted = this.bounces + 1;
-        this.bakePass = 0;
-        this.bakeCursor = 0;
-      } else {
-        this.updateEnvironment();
+  /** Kolik sond zapéct v tomto snímku: cíl je nejvýš ~2 ms práce CPU (1 sonda = 6 pohledů na scénu). */
+  private probeBudget(): number {
+    return THREE.MathUtils.clamp(Math.floor(2 / Math.max(this.probeMs, 0.25)), 1, 4);
+  }
+
+  /**
+   * Inkrementální přepočet GI do zadní mřížky – volá se každý snímek. Když se stav světla liší od
+   * zapečeného (běží přechod fáze), zapéká se pořád dokola po pár sondách; snímek to skoro nepozná.
+   * `force` = pevný počet sond (testy a debug, kde na plynulosti nezáleží).
+   */
+  bakeStep(force?: number): void {
+    this.stepEnvironment();
+    if (this.bakePassesWanted === 0) {
+      const sig = this.signature(this.state);
+      if (sig === this.bakedSig) return;
+      this.bakeSig = sig;
+      if (!this.grid || !this.gridBack) {
+        // bez mřížky (předvolba Nízká) stačí obnovit odrazovou mapu
+        this.bakedSig = sig;
+        this.envWanted = true;
+        return;
       }
+      this.bakePassesWanted = this.bounces + 1;
+      this.bakePass = 0;
+      this.bakeCursor = 0;
     }
-    if (!this.grid || !this.gridBack || this.bakePassesWanted === 0) return;
-    const count = Math.min(budget, this.gridTotal - this.bakeCursor);
-    this.bakeRange(this.gridBack, this.bakeCursor, count, this.bakePass);
+    if (!this.grid || !this.gridBack) return;
+    const count = Math.min(force ?? this.probeBudget(), this.gridTotal - this.bakeCursor);
+    const t0 = performance.now();
+    this.bakeRange(this.gridBack, this.bakeCursor, count, this.bakePass, force === undefined);
+    if (force === undefined) this.probeMs += ((performance.now() - t0) / count - this.probeMs) * 0.15;
     this.bakeCursor += count;
     if (this.bakeCursor >= this.gridTotal) {
       this.bakeCursor = 0;
@@ -419,23 +448,63 @@ export class Lighting {
         this.gridBack = front;
         this.grid.priority = 1;
         this.gridBack.priority = 0;
-        this.updateEnvironment();
+        this.bakedSig = this.bakeSig;
+        this.envWanted = true;
       }
     }
   }
 
-  /** Zachytí místnost do krychlové mapy → PMREM → scene.environment (odrazy). */
-  updateEnvironment(): void {
-    const scene = this.ctx.scene;
+  /** Vykreslí jednu stěnu odrazové krychle (scéna bez kočky a drobností). */
+  private renderEnvFace(face: number): void {
+    const r = this.renderer;
+    const prevTarget = r.getRenderTarget();
+    const prevFace = r.getActiveCubeFace();
+    const prevMip = r.getActiveMipmapLevel();
+    const prevClear = r.autoClear;
     this.setHidden(true);
-    const prevTarget = this.renderer.getRenderTarget();
-    this.renderer.shadowMap.needsUpdate = true;
-    this.cubeCam.update(this.renderer, scene);
+    r.autoClear = true;
+    r.setRenderTarget(this.cubeRT, face);
+    r.render(this.ctx.scene, this.cubeCam.children[face] as THREE.PerspectiveCamera);
+    r.autoClear = prevClear;
     this.setHidden(false);
-    const rt = this.pmrem.fromCubemap(this.cubeRT.texture);
-    scene.environment = rt.texture;
-    if (this.envRT) this.envRT.dispose();
-    this.envRT = rt;
+    r.setRenderTarget(prevTarget, prevFace, prevMip);
+  }
+
+  /** Krychle → PMREM → scene.environment (filtruje se pořád do stejného cíle, bez alokací). */
+  private filterEnvironment(): void {
+    const prevTarget = this.renderer.getRenderTarget();
+    this.envRT = this.pmrem.fromCubemap(this.cubeRT.texture, this.envRT ?? undefined);
+    this.ctx.scene.environment = this.envRT.texture;
     this.renderer.setRenderTarget(prevTarget);
+  }
+
+  /** Obnova odrazové mapy rozložená do 7 snímků (6 stěn + filtrace), aby nezpůsobila škubnutí. */
+  private stepEnvironment(): void {
+    if (this.envFace < 0) {
+      if (!this.envWanted) return;
+      this.envWanted = false;
+      this.envFace = 0;
+    }
+    if (this.envFace < 6) {
+      this.renderEnvFace(this.envFace);
+      this.envFace++;
+    } else {
+      this.filterEnvironment();
+      this.envFace = -1;
+    }
+  }
+
+  /** Okamžité zachycení místnosti do odrazové mapy (při načítání). */
+  updateEnvironment(): void {
+    // první volání přes CubeCamera.update nastaví souřadný systém jejích šesti kamer
+    const r = this.renderer;
+    const prevClear = r.autoClear;
+    this.setHidden(true);
+    r.autoClear = true;
+    r.shadowMap.needsUpdate = true;
+    this.cubeCam.update(r, this.ctx.scene);
+    r.autoClear = prevClear;
+    this.setHidden(false);
+    this.filterEnvironment();
   }
 }

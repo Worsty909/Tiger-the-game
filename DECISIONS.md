@@ -39,6 +39,19 @@ Vše, co zadání nechalo otevřené, je rozhodnuto tak, aby to podpořilo reali
 - Globální osvětlení: mřížka světelných sond (`LightProbeGridWebGL`, novinka Three.js r187) zapékaná
   za běhu, při změně fáze západu se přepočítá inkrementálně do zadní mřížky a pak se prohodí.
   Na předvolbě Nízká se místo ní použije IBL z odrazové sondy (a nižší expozice).
+- **Přepočet GI nesmí být znát.** Jedna sonda = 6 pohledů na scénu (~280 draw calls). Původní verze
+  jich zapékala 24 na snímek a navíc hned po startu znovu to, co už bylo zapečené – hra se pak na
+  skutečném počítači silně zadrhávala. Teď se zapéká 1–4 sondy na snímek (rozpočet ~2 ms CPU),
+  jen když se stav světla opravdu liší od zapečeného (porovnává se „podpis“ fáze), a stínová mapa
+  slunce se při tom nepřekresluje. Vysoká proto používá stejnou hrubou mřížku jako Střední
+  (252 sond, 1 odraz) – jemnější mřížka by se přepočítávala desítky sekund.
+- Odrazová mapa se obnovuje po jedné stěně krychle za snímek a filtruje se stále do stejného cíle.
+- Všechna světla (slunce, stojací lampa, závěsné svítidlo, LED pásek) jsou ve scéně trvale a vypínají
+  se intenzitou, ne viditelností: změna počtu světel by přiměla three.js uprostřed hry překompilovat
+  všechny shadery. LED pásek je kvůli ceně shaderu bodový reflektor, ne plošné světlo.
+- Při načítání proběhne „zahřívací snímek“: vykreslí se úplně všechno (i schované předměty, bez
+  ořezu pohledem, se všemi průchody post-processingu), aby se shadery zkompilovaly a textury nahrály
+  za načítací obrazovkou, a ne až při hraní.
 - Odrazy: krychlová sonda uprostřed místnosti → PMREM → `scene.environment`.
 - Obloha: tři HDRI z Poly Haven (qwantani sunset / dusk), mezi kterými se prolíná; sluneční kotouč
   a jeho záře jsou dokresleny procedurálně, aby seděly s výškou herního slunce.
@@ -107,13 +120,16 @@ Vše, co zadání nechalo otevřené, je rozhodnuto tak, aby to podpořilo reali
 - Průchod hrou (`tools/playthrough.mjs`) používá skutečné vstupy (virtuální klávesy, mířené skoky,
   tlapku), ne jen `solveStep` – ověřuje tedy i dosažitelnost všech plošin.
 - FPS na skutečné grafické kartě v tomto prostředí změřit nešlo (není tu GPU); `tools/fps.mjs`
-  měření umí a v README jsou uvedena softwarová čísla i rozpočet draw calls / trojúhelníků.
+  měření umí a v README je rozpočet draw calls / trojúhelníků na snímek.
   Čas snímku se měří se synchronizací přes `readPixels` – samotné `gl.finish()` v Chromiu neblokuje.
 - Optimalizace: slučování statické geometrie podle materiálu, instancing (knihy, město, vrstvy srsti,
   prach), AO a god rays v polovičním rozlišení, stíny slunce jednou za snímek pro všechny průchody,
-  stín stojací lampy (6 průchodů bodového světla) jen každý 4. snímek, GI se přepočítává jen při
-  změně fáze a po částech, LOD srsti. Frustum culling zůstává zapnutý, ale u jedné místnosti
-  pomáhá málo (sloučené sítě ji zabírají skoro celou) – hlavní úspora je v počtu draw calls.
+  stín stojací lampy (6 průchodů bodového světla) jen na Ultra a každý 2. snímek, GI se přepočítává
+  jen při změně fáze a po pár sondách na snímek, LOD srsti. Frustum culling zůstává zapnutý, ale
+  u jedné místnosti pomáhá málo (sloučené sítě ji zabírají skoro celou) – hlavní úspora je v počtu
+  draw calls.
+- Animace je odolná vůči pomalým snímkům: pružiny (podřep po dopadu, ocas) se integrují po krocích
+  nejvýš 1/120 s. Dřív při zadrhnutí kmitaly a Tiger se sám přikrčoval a narovnával.
 
 ## Assety
 

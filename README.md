@@ -71,8 +71,8 @@ Předvolbu lze vynutit i adresou: `?quality=low|medium|high|ultra`.
 | --- | --- | --- | --- | --- | --- | --- |
 | Nízká | 1024 | vypnuto (IBL) | – | – | 16 | integrované grafiky, 80 % rozlišení |
 | Střední | 2048 | hrubá mřížka, 1 odraz | nízké | 12 kroků | 20 | |
-| Vysoká | 4096 | plná mřížka, 2 odrazy | střední | 20 kroků | 24 | výchozí, cíl 60 FPS na RTX 3060 |
-| Ultra | 4096 | plná mřížka, 3 odrazy | vysoké, plné rozlišení | 32 kroků | 32 | na HiDPI displejích až 1,5× rozlišení |
+| Vysoká | 4096 | hrubá mřížka, 1 odraz | střední | 20 kroků | 24 | výchozí, cíl 60 FPS na RTX 3060 |
+| Ultra | 4096 | plná mřížka, 2 odrazy | vysoké, plné rozlišení | 32 kroků | 32 | stín stojací lampy, na HiDPI až 1,5× rozlišení |
 
 Další přepínače v adrese: `?fur=0` (bez srsti), `?gi=off|coarse|full`, `?rig=runtime` (vynutí rig
 za běhu, varianta B), `?autostart=new|continue` (přeskočí menu).
@@ -173,20 +173,31 @@ V konzoli prohlížeče je k dispozici `window.__tigerDebug`:
 
 Cíl zadání je 60 FPS na RTX 3060 na předvolbě **Vysoká**. **Na skutečné grafické kartě se to
 v prostředí, kde hra vznikala, změřit nedalo** – není v něm GPU a Chromium tam kreslí softwarovým
-rasterizérem (SwiftShader). Změřit se dalo jen toto:
+rasterizérem (SwiftShader, 6–10 s na snímek ve Vysoké/1080p, což o výkonu na GPU nic neříká).
+Změřit se dal rozpočet snímku:
 
-| Záběr (Vysoká, 1920 × 1080) | Draw calls | Trojúhelníky | Čas snímku na SwiftShaderu (4 jádra CPU) |
-| --- | --- | --- | --- |
-| obývák od křesla k oknu | 282 | 1,27 M | 10,0 s |
-| okno a paprsky | 267 | 1,57 M | 9,3 s |
-| kuchyň | 266 | 1,55 M | 6,5 s |
-| celý pokoj od lednice | 311 | 1,70 M | 10,4 s |
-| kamera přitlačená zdí k Tigerovi | 309 | 0,79 M | 9,5 s |
+| Záběr (Vysoká, 1920 × 1080) | Draw calls | Trojúhelníky |
+| --- | --- | --- |
+| obývák od křesla k oknu | 282 | 1,68 M |
+| okno a paprsky | 267 | 1,57 M |
+| kuchyň | 266 | 1,55 M |
+| celý pokoj od lednice | 311 | 1,70 M |
 
-Softwarové časy o výkonu na GPU nic neříkají; směrodatný je rozpočet: do ~310 draw calls
-a ~1,7 M trojúhelníků na snímek (včetně stínových průchodů a 24 vrstev srsti), AO a paprsky
-v polovičním rozlišení, jedna stínová mapa 4096² + stín stojací lampy. To je zátěž, kterou by
-karta třídy RTX 3060 měla v 1080p zvládat s rezervou – ale je to odhad, ne měření.
+Čísla jsou včetně stínového průchodu a 24 vrstev srsti a platí pro všechny fáze západu. AO a paprsky
+běží v polovičním rozlišení, stínová mapa je jedna (4096²). To je zátěž, kterou by karta třídy
+RTX 3060 měla v 1080p zvládat s rezervou – ale je to odhad, ne měření.
+
+**Plynulost.** Hra za běhu nic velkého nepočítá najednou:
+
+- Shadery a textury se připraví při načítání („zahřívací snímek“ vykreslí i schované předměty),
+  takže se hra nezadrhne, když se kamera poprvé otočí na něco nového. Ověřeno počítadlem
+  zkompilovaných programů: po načtení přibude za celou hru jediný.
+- Všechna světla jsou ve scéně od začátku (zhasnutá mají nulovou intenzitu) – rozsvícení lampy
+  nespustí překompilování shaderů.
+- Globální osvětlení se při změně fáze západu přepočítává po 1–4 sondách na snímek (podle toho,
+  kolik stihne za ~2 ms) – to je zhruba +300 draw calls na snímek po dobu pár sekund. Odrazová
+  mapa se obnovuje po jedné stěně krychle za snímek.
+- Když hra i tak dlouhodobě běží pod 30 FPS, jednou sama poradí nižší kvalitu.
 
 Změř si to sám:
 
@@ -195,13 +206,12 @@ npm run build
 TIGER_GPU=1 TIGER_HEADED=1 npm run test:fps   # Vysoká, 1920×1080; vypíše WebGL renderer, FPS a „CÍL 60 FPS: SPLNĚN/NESPLNĚN“
 ```
 
-nebo ve hře z konzole: `__tigerDebug.showFps(true)`. Kdyby to nestačilo, pomůže předvolba Střední,
-případně `?fur=0`.
+nebo ve hře z konzole: `__tigerDebug.showFps(true)`. Kdyby to nestačilo, pomůže předvolba Střední
+nebo Nízká, případně `?fur=0`.
 
-Provedené optimalizace: slučování statické geometrie podle materiálu (cca 600 → 250 draw calls),
+Další optimalizace: slučování statické geometrie podle materiálu (cca 600 → 250 draw calls),
 instancing (knihy, město, vrstvy srsti, prach), poloviční rozlišení AO a paprsků, stíny slunce
-jednou za snímek, stín stojací lampy jen každý 4. snímek, globální osvětlení se přepočítává jen při
-změně fáze západu a po částech, LOD srsti při kameře přitlačené ke kočce.
+jednou za snímek, LOD srsti při kameře přitlačené ke kočce.
 
 ## Známá omezení
 
@@ -213,7 +223,9 @@ změně fáze západu a po částech, LOD srsti při kameře přitlačené ke ko
   Vysoká a Ultra používají stejný kód s jemnější mřížkou GI, ostřejšími stíny a víc vrstvami srsti,
   ale v pohybu na skutečné grafické kartě vyzkoušené nebyly.
 - Hra cílí na desktop (klávesnice + myš nebo gamepad); dotykové ovládání nemá.
-- První načtení trvá několik sekund – zapéká se globální osvětlení.
+- Načítání trvá několik sekund – zapéká se globální osvětlení a kompilují se shadery.
+- Po vyřešení hádanky se nepřímé světlo dopočítává ještě několik sekund po skončení přechodu
+  (v pár drobných krocích), aby přepočet nezatěžoval snímky.
 
 ## Struktura projektu
 

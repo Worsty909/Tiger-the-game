@@ -23,7 +23,7 @@ import { Journal } from '../puzzles/Journal';
 import { Interactions } from '../puzzles/Interact';
 import { PuzzleGraph } from '../puzzles/PuzzleGraph';
 import type { PuzzleCtx, GameStats } from '../puzzles/PuzzleCtx';
-import { livingRoomSteps } from '../puzzles/rooms/livingRoom';
+import { livingRoomSteps, SUNSET_PHASE } from '../puzzles/rooms/livingRoom';
 import { setKittenPhoto } from '../puzzles/steps/05_photo';
 
 const _furC = new THREE.Vector3();
@@ -71,6 +71,8 @@ export class Game {
   private acc = 0;
   private fpsAcc = 0;
   private fpsFrames = 0;
+  private slowT = 0;
+  private slowHinted = false;
   private running = false;
   private timers: Array<{ t: number; fn: () => void }> = [];
   private prevDir = { x: 0, y: 0 };
@@ -156,9 +158,26 @@ export class Game {
     // první snímek zkompiluje shadery a vyrenderuje stíny
     this.tiger.update(0.016, 1);
     this.gfx.render(0);
-    await this.lighting.bakeAll((f) => progress('Světlo…', 0.6 + 0.36 * f));
-    progress('Vzpomínky…', 0.97);
+    const q = new URLSearchParams(location.search);
+    const auto = q.get('autostart');
+    // Pokračování uložené hry: světlo se zapeče rovnou pro uloženou fázi západu (jinak by se GI
+    // prvních pár sekund hry viditelně dohánělo). Fotka koťátka se ale fotí v denním světle.
+    let savedPhase = 0;
+    if (auto === 'continue') for (const id of Save.load()?.solved ?? []) savedPhase = Math.max(savedPhase, SUNSET_PHASE[id] ?? 0);
+    const twoBakes = savedPhase > 0;
+    await this.lighting.bakeAll((f) => progress('Světlo…', 0.6 + (twoBakes ? 0.18 : 0.36) * f));
+    progress('Vzpomínky…', twoBakes ? 0.78 : 0.96);
     this.snapshotKitten();
+    if (twoBakes) {
+      this.lighting.setPhaseImmediate(savedPhase);
+      this.gfx.setExposure(this.lighting.state.exposure);
+      this.gfx.render(0);
+      await this.lighting.bakeAll((f) => progress('Světlo…', 0.8 + 0.16 * f));
+    }
+    // zahřívací snímek: zkompiluje shadery a nahraje textury i pro věci, které zatím nejsou vidět
+    progress('Poslední úpravy…', 0.97);
+    await new Promise((r) => setTimeout(r, 0));
+    this.warmUp();
     progress('Hotovo', 1);
     this.ready = true;
     bus.on('settingsChanged', ({ key }) => {
@@ -167,12 +186,41 @@ export class Game {
     });
 
     // --- start: menu, nebo rovnou hra (?autostart=new|continue, ?test=1)
-    const q = new URLSearchParams(location.search);
-    const auto = q.get('autostart');
     if (q.has('test')) this.flow.startDirect();
     else if (auto === 'continue' && Save.has()) this.flow.continueGame();
     else if (auto === 'new') this.flow.newGame();
     else this.flow.showMenu();
+  }
+
+  /**
+   * Zahřívací snímek za načítací obrazovkou. Three.js kompiluje shader a nahrává texturu až ve chvíli,
+   * kdy se objekt poprvé vykreslí – bez tohohle by se hra zadrhla pokaždé, když se kamera poprvé otočí
+   * na něco nového nebo se objeví schovaný předmět. Proto se jednou vykreslí úplně všechno
+   * (i skryté objekty, bez ořezu pohledem, se všemi průchody post-processingu).
+   */
+  private warmUp(): void {
+    const hidden: THREE.Object3D[] = [];
+    const culled: THREE.Object3D[] = [];
+    const visit = (o: THREE.Object3D) => {
+      if (!o.visible) {
+        hidden.push(o);
+        o.visible = true;
+      }
+      if (o.frustumCulled) {
+        culled.push(o);
+        o.frustumCulled = false;
+      }
+    };
+    this.scene.traverse(visit);
+    this.gfx.overlayScene.traverse(visit);
+    try {
+      this.gfx.warmUp();
+    } catch (e) {
+      console.warn('Zahřívací snímek selhal', e);
+    } finally {
+      for (const o of hidden) o.visible = false;
+      for (const o of culled) o.frustumCulled = true;
+    }
   }
 
   /** Zvuky navázané na pohyb Tigera. */
@@ -359,6 +407,17 @@ export class Game {
       this.fps = this.fpsFrames / this.fpsAcc;
       this.fpsAcc = 0;
       this.fpsFrames = 0;
+      this.watchSlowness();
+    }
+  }
+
+  /** Když hra dlouhodobě běží pod 30 FPS, jednou poradí nižší kvalitu. */
+  private watchSlowness(): void {
+    if (this.slowHinted || this.manualStepping || this.state !== 'playing' || settings.data.quality === 'low') return;
+    this.slowT = this.fps < 30 ? this.slowT + 0.5 : Math.max(0, this.slowT - 1);
+    if (this.slowT >= 6) {
+      this.slowHinted = true;
+      this.ui.toast('Hra běží pomalu – v Nastavení (Esc) zkus nižší kvalitu', '⚙');
     }
   }
 
@@ -397,7 +456,7 @@ export class Game {
   private update(dt: number, alpha: number): void {
     const L = this.lighting;
     L.update(dt);
-    if (this.ready) L.bakeStep(settings.data.quality === 'ultra' ? 40 : 24);
+    if (this.ready) L.bakeStep();
     if (this.simulating) this.tiger.update(dt, alpha);
     this.flow.update(dt);
     this.camera.update(dt);

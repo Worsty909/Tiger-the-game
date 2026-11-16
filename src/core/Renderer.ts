@@ -459,6 +459,20 @@ export class Renderer {
     v.density = density;
   }
 
+  /** Zahřívací snímek: jednou proběhnou i průchody, které jsou běžně vypnuté (DOF, vrstva smyslů). */
+  warmUp(): void {
+    const dof = this.dofPass.enabled;
+    const overlay = this.overlayPass.enabled;
+    this.dofPass.enabled = true;
+    this.overlayPass.enabled = true;
+    try {
+      this.render(0);
+    } finally {
+      this.dofPass.enabled = dof;
+      this.overlayPass.enabled = overlay;
+    }
+  }
+
   render(dt: number): void {
     this.time += dt;
     const cam = this.camera;

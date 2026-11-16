@@ -74,6 +74,7 @@ Všechny milníky M1–M5 jsou hotové.
 | Průchod hrou | `npm run test:playthrough` – 78 kontrol: dosažitelnost skoků, všech 8 kroků skutečnými vstupy, tajemství, nápovědy, autosave, finále | **PRŮCHOD HROU: OK**, konzole bez chyb |
 | Klíčové záběry | `npm run test:shots` – 16 záběrů (`screenshots/01_…16_`) na předvolbě Střední | prohlédnuto a laděno v několika iteracích |
 | Výkon | `npm run test:fps` na předvolbě Vysoká | viz README, oddíl Výkon |
+| Plynulost | počítadla rendereru: práce navíc během přechodu fáze západu, nové shadery a textury za běhu | přepočet světla ~300 draw calls na snímek (dřív ~6 700), po načtení přibude za hru 1 shader |
 
 Co se v tomto prostředí ověřit nedalo: FPS na skutečné grafické kartě (testy běží na softwarovém
 rasterizéru) a poslech zvuku. Obojí je popsáno v README.
