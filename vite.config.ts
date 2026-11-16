@@ -9,7 +9,7 @@ import { resolve } from 'node:path';
 function audioSlots(): Plugin {
   const id = 'virtual:tiger-audio';
   const resolved = '\0' + id;
-  const dir = resolve(__dirname, 'public/audio');
+  const dir = resolve(import.meta.dirname, 'public/audio');
   const list = () => (existsSync(dir) ? readdirSync(dir).filter((f) => /\.(ogg|mp3|wav)$/i.test(f)) : []);
   return {
     name: 'tiger-audio-slots',

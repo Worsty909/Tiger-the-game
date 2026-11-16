@@ -92,6 +92,13 @@ Vše, co zadání nechalo otevřené, je rozhodnuto tak, aby to podpořilo reali
   podobným modelem; použije se automaticky, když `tiger_rigged.glb` chybí.
 - Srst: délka vrstev je u každého vrcholu omezena podle tloušťky sítě v daném místě (uši, vousky,
   tlapky mají kratší chlup), jinak by tenké části vypadaly jako peří.
+- Srst nemá zrcadlový odlesk (`specularIntensity` ~0,15): GGX by z hřbetu v protisvětle nízkého slunce
+  udělal jednolitou bílou plochu. Lesk obstarává sheen (tlumený podle pigmentu – tmavé skvrny se
+  lesknou míň) a oči mají vlastní clearcoat.
+- Přímé světlo na srsti má „měkké koleno“ počítané z dopadajícího světla: expozice je nastavená na
+  stín interiéru, takže by kočka na slunci vybělela a ztratila kresbu. Jas se stlačí, kontrast kresby zůstane.
+- LOD srsti: když zeď přitlačí kameru až ke kočce (< 0,6 m), ubírají se vnější vrstvy – jinak by se
+  přes celý obraz překreslovaly všechny vrstvy přes sebe. Ve filmových záběrech je srst vždy plná.
 
 ## Testování a výkon
 
@@ -101,6 +108,12 @@ Vše, co zadání nechalo otevřené, je rozhodnuto tak, aby to podpořilo reali
   tlapku), ne jen `solveStep` – ověřuje tedy i dosažitelnost všech plošin.
 - FPS na skutečné grafické kartě v tomto prostředí změřit nešlo (není tu GPU); `tools/fps.mjs`
   měření umí a v README jsou uvedena softwarová čísla i rozpočet draw calls / trojúhelníků.
+  Čas snímku se měří se synchronizací přes `readPixels` – samotné `gl.finish()` v Chromiu neblokuje.
+- Optimalizace: slučování statické geometrie podle materiálu, instancing (knihy, město, vrstvy srsti,
+  prach), AO a god rays v polovičním rozlišení, stíny slunce jednou za snímek pro všechny průchody,
+  stín stojací lampy (6 průchodů bodového světla) jen každý 4. snímek, GI se přepočítává jen při
+  změně fáze a po částech, LOD srsti. Frustum culling zůstává zapnutý, ale u jedné místnosti
+  pomáhá málo (sloučené sítě ji zabírají skoro celou) – hlavní úspora je v počtu draw calls.
 
 ## Assety
 

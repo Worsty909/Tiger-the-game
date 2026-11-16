@@ -5,7 +5,7 @@ import { startServer, openGame, renderFrames, root } from './lib/harness.mjs';
 
 const [quality = 'low', w = '640', h = '360', params = '', script = 'tools/dbg_script.js'] = process.argv.slice(2);
 const server = await startServer();
-const { page, logs, close } = await openGame(server.url, { quality, width: Number(w), height: Number(h), params });
+const { page, logs, close } = await openGame(server.url, { quality, width: Number(w), height: Number(h), params, test: !process.env.TIGER_NOTEST });
 mkdirSync(join(root, 'screenshots'), { recursive: true });
 const shot = async (name) => {
   await renderFrames(page, 2);

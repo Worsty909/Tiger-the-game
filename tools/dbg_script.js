@@ -1,20 +1,11 @@
-const res = await page.evaluate(async () => {
-  const d = window.__tigerDebug; const g = d.game; const gl = g.gfx.renderer.getContext();
+// Ladicí skript pro `node tools/dbg.mjs [quality] [šířka] [výška] [parametry]`.
+// K dispozici: page (Playwright), shot(název) → screenshots/<název>.png, renderFrames(page, n).
+// Příklad: skok na krok se zámkem a snímek detailu.
+await page.evaluate(() => {
+  const d = window.__tigerDebug;
   d.setManual(true);
-  d.teleport(-1.1, 0.02, -0.9, -1.75); d.look(-1.75, 0.02); d.simulate(1.5);
-  const px = new Uint8Array(4);
-  const sync = () => { gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px); };
-  const time = () => { d.renderFrame(1 / 60); sync(); const t0 = performance.now(); for (let i = 0; i < 2; i++) { d.renderFrame(1 / 60); sync(); } return Math.round((performance.now() - t0) / 2); };
-  const P = g.gfx.composer.passes; const out = {};
-  out.passes = P.map((p) => p.constructor.name + (p.enabled ? '' : '(off)'));
-  out.base = time();
-  const toggle = (i, label) => { const was = P[i].enabled; P[i].enabled = false; out[label] = time(); P[i].enabled = was; };
-  toggle(2, 'bez AO'); toggle(3, 'bez volumetrik');
-  P[7].enabled = false; out['bez SMAA/vinětace/zrna'] = time(); P[7].enabled = true;
-  g.tiger.fur.setEnabled(false); out['bez srsti'] = time(); g.tiger.fur.setEnabled(true);
-  g.lighting.sun.castShadow = false; out['bez stínů slunce'] = time(); g.lighting.sun.castShadow = true;
-  const sc = g.gfx.scene; sc.overrideMaterial = new (Object.getPrototypeOf(g.ctx.mats.rubber).constructor)({ color: 0x888888 }); out['jednotný materiál (bez textur)'] = time(); sc.overrideMaterial = null;
-  out.calls = g.gfx.info.calls; out.tris = g.gfx.info.triangles;
-  return out;
+  d.simulate(0.3);
+  d.gotoStep('lock');
+  d.simulate(1.0);
 });
-console.log(JSON.stringify(res, null, 1));
+await shot('dbg_example');

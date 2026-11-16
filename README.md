@@ -17,9 +17,13 @@ hádanek, jedno tajemství, 20–30 minut hraní. Vše je česky.
 
 ![Tiger v obýváku](screenshots/05_gameplay_living.png)
 
+| Úvod | Finále |
+| --- | --- |
+| ![Úvodní scéna](screenshots/04_intro_title.png) | ![Západ slunce na balkoně](screenshots/15_finale.png) |
+
 ## Instalace a spuštění
 
-Potřebuješ Node.js 20+ a prohlížeč s WebGL2 (Chrome, Edge, Firefox).
+Potřebuješ Node.js 20.19+ (nebo 22+) a prohlížeč s WebGL2 (Chrome, Edge, Firefox).
 
 ```bash
 npm install
@@ -68,7 +72,7 @@ Předvolbu lze vynutit i adresou: `?quality=low|medium|high|ultra`.
 | Nízká | 1024 | vypnuto (IBL) | – | – | 16 | integrované grafiky, 80 % rozlišení |
 | Střední | 2048 | hrubá mřížka, 1 odraz | nízké | 12 kroků | 20 | |
 | Vysoká | 4096 | plná mřížka, 2 odrazy | střední | 20 kroků | 24 | výchozí, cíl 60 FPS na RTX 3060 |
-| Ultra | 4096 | plná mřížka, 3 odrazy | vysoké, plné rozlišení | 32 kroků | 32 | 150 % rozlišení |
+| Ultra | 4096 | plná mřížka, 3 odrazy | vysoké, plné rozlišení | 32 kroků | 32 | na HiDPI displejích až 1,5× rozlišení |
 
 Další přepínače v adrese: `?fur=0` (bez srsti), `?gi=off|coarse|full`, `?rig=runtime` (vynutí rig
 za běhu, varianta B), `?autostart=new|continue` (přeskočí menu).
@@ -167,7 +171,49 @@ V konzoli prohlížeče je k dispozici `window.__tigerDebug`:
 
 ## Výkon
 
-<!-- PERF -->
+Cíl zadání je 60 FPS na RTX 3060 na předvolbě **Vysoká**. **Na skutečné grafické kartě se to
+v prostředí, kde hra vznikala, změřit nedalo** – není v něm GPU a Chromium tam kreslí softwarovým
+rasterizérem (SwiftShader). Změřit se dalo jen toto:
+
+| Záběr (Vysoká, 1920 × 1080) | Draw calls | Trojúhelníky | Čas snímku na SwiftShaderu (4 jádra CPU) |
+| --- | --- | --- | --- |
+| obývák od křesla k oknu | 282 | 1,27 M | 10,0 s |
+| okno a paprsky | 267 | 1,57 M | 9,3 s |
+| kuchyň | 266 | 1,55 M | 6,5 s |
+| celý pokoj od lednice | 311 | 1,70 M | 10,4 s |
+| kamera přitlačená zdí k Tigerovi | 309 | 0,79 M | 9,5 s |
+
+Softwarové časy o výkonu na GPU nic neříkají; směrodatný je rozpočet: do ~310 draw calls
+a ~1,7 M trojúhelníků na snímek (včetně stínových průchodů a 24 vrstev srsti), AO a paprsky
+v polovičním rozlišení, jedna stínová mapa 4096² + stín stojací lampy. To je zátěž, kterou by
+karta třídy RTX 3060 měla v 1080p zvládat s rezervou – ale je to odhad, ne měření.
+
+Změř si to sám:
+
+```bash
+npm run build
+TIGER_GPU=1 TIGER_HEADED=1 npm run test:fps   # Vysoká, 1920×1080; vypíše WebGL renderer, FPS a „CÍL 60 FPS: SPLNĚN/NESPLNĚN“
+```
+
+nebo ve hře z konzole: `__tigerDebug.showFps(true)`. Kdyby to nestačilo, pomůže předvolba Střední,
+případně `?fur=0`.
+
+Provedené optimalizace: slučování statické geometrie podle materiálu (cca 600 → 250 draw calls),
+instancing (knihy, město, vrstvy srsti, prach), poloviční rozlišení AO a paprsků, stíny slunce
+jednou za snímek, stín stojací lampy jen každý 4. snímek, globální osvětlení se přepočítává jen při
+změně fáze západu a po částech, LOD srsti při kameře přitlačené ke kočce.
+
+## Známá omezení
+
+- **FPS na GPU není změřeno** (viz výše).
+- **Zvuk nikdo neposlouchal.** Testy ověřují jen to, že se zvuky ve správných chvílích spouštějí
+  (počitadla `__tigerDebug.audioCounts()`); jak procedurální mňoukání, předení a hudba znějí,
+  je potřeba posoudit ušima. Jakýkoli zvuk jde nahradit nahrávkou (viz výše).
+- Obraz byl laděn podle screenshotů převážně z předvoleb Nízká a Střední na softwarovém rasterizéru;
+  Vysoká a Ultra používají stejný kód s jemnější mřížkou GI, ostřejšími stíny a víc vrstvami srsti,
+  ale v pohybu na skutečné grafické kartě vyzkoušené nebyly.
+- Hra cílí na desktop (klávesnice + myš nebo gamepad); dotykové ovládání nemá.
+- První načtení trvá několik sekund – zapéká se globální osvětlení.
 
 ## Struktura projektu
 

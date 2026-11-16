@@ -408,7 +408,8 @@ export class Game {
     this.tiger.fur.setTapetum(Math.min(1, this.senses.nightVision * 0.9 + L.darkness * 0.35));
     _furC.copy(this.cat.position);
     _furC.y += 0.2;
-    this.tiger.fur.setViewDistance(this.gfx.camera.position.distanceTo(_furC));
+    // ve filmových záběrech (intro, detaily, finále) vždy plná srst; LOD je jen pro kameru přitlačenou ke kočce
+    this.tiger.fur.setViewDistance(this.camera.inShot ? 10 : this.gfx.camera.position.distanceTo(_furC));
     this.gfx.setExposure(L.state.exposure * L.exposureScale * (1 + this.senses.nightVision * 0.6));
     this.gfx.setVolumetric(L.sun, L.toSun, this.volumetricDensity);
     const wb = L.whiteBalance;

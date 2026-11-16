@@ -87,6 +87,9 @@ export class Fur {
       sheen: 0.45,
       sheenRoughness: 0.5,
       sheenColor: new THREE.Color(0xf2b46e),
+      // srst nemá zrcadlový odlesk: GGX by v protisvětle (nízké slunce) udělal z hřbetu bílou plochu;
+      // lesk obstarává sheen, oči mají vlastní clearcoat
+      specularIntensity: 0.18,
       clearcoat: 1,
       clearcoatRoughness: 0.06,
     });
@@ -104,12 +107,28 @@ export class Fur {
           float eyeM = eyeMaskAt(vRestPos);
           material.clearcoat *= eyeM;
           material.roughness = mix(material.roughness, 0.12, eyeM);
-          material.sheenColor *= (1.0 - eyeM);`,
+          // lesk přebírá pigment chlupu: tmavé skvrny se lesknou míň
+          #ifdef USE_SHEEN
+            material.sheenColor *= (1.0 - eyeM) * mix(0.25, 1.0, smoothstep(0.03, 0.45, dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722))));
+          #endif`,
         )
         .replace(
           '#include <lights_fragment_end>',
           /* glsl */ `#include <lights_fragment_end>
           {
+            // Přímé slunce by srst vybělilo (expozice je nastavená na stín interiéru a AgX světla odbarvuje).
+            // Měkké koleno se proto počítá z DOPADAJÍCÍHO světla, ne z odraženého: jas se stlačí,
+            // ale kontrast kresby (albedo) zůstane. Lesk a odlesky mají navíc vlastní strop.
+            const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
+            float sunE = dot(reflectedLight.directDiffuse, LUMA) * PI / max(dot(material.diffuseColor, LUMA), 0.02);
+            float knee = 1.0 / (1.0 + max(sunE - 0.6, 0.0) * 0.55);
+            reflectedLight.directDiffuse *= knee;
+            reflectedLight.directSpecular *= knee;
+            reflectedLight.directSpecular *= 1.0 / (1.0 + dot(reflectedLight.directSpecular, LUMA) * 4.0);
+            #ifdef USE_SHEEN
+              sheenSpecularDirect *= knee;
+              sheenSpecularDirect *= 1.0 / (1.0 + dot(sheenSpecularDirect, LUMA) * 7.0);
+            #endif
             // glitter: drobné jiskřičky v odlescích, mění se s úhlem pohledu
             vec3 gcell = floor(vRestPos * 1400.0);
             vec3 vdir = normalize(vViewPosition);
@@ -122,7 +141,7 @@ export class Fur {
           }`,
         );
     };
-    skin.customProgramCacheKey = () => 'tiger-skin';
+    skin.customProgramCacheKey = () => 'tiger-skin-4';
     mesh.material = skin;
     this.skin = skin;
 
@@ -140,6 +159,7 @@ export class Fur {
         sheen: 0.4,
         sheenRoughness: 0.45,
         sheenColor: new THREE.Color(0xf6bd7c),
+        specularIntensity: 0.12,
         side: THREE.FrontSide,
       });
       fur.onBeforeCompile = (shader) => {
@@ -184,9 +204,29 @@ export class Fur {
             }`,
           )
           .replace(
+            '#include <lights_physical_fragment>',
+            /* glsl */ `#include <lights_physical_fragment>
+            #ifdef USE_SHEEN
+              material.sheenColor *= mix(0.25, 1.0, smoothstep(0.03, 0.45, dot(diffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722))));
+            #endif`,
+          )
+          .replace(
             '#include <lights_fragment_end>',
             /* glsl */ `#include <lights_fragment_end>
             {
+            // Přímé slunce by srst vybělilo (expozice je nastavená na stín interiéru a AgX světla odbarvuje).
+            // Měkké koleno se proto počítá z DOPADAJÍCÍHO světla, ne z odraženého: jas se stlačí,
+            // ale kontrast kresby (albedo) zůstane. Lesk a odlesky mají navíc vlastní strop.
+            const vec3 LUMA = vec3(0.2126, 0.7152, 0.0722);
+            float sunE = dot(reflectedLight.directDiffuse, LUMA) * PI / max(dot(material.diffuseColor, LUMA), 0.02);
+            float knee = 1.0 / (1.0 + max(sunE - 0.6, 0.0) * 0.55);
+            reflectedLight.directDiffuse *= knee;
+            reflectedLight.directSpecular *= knee;
+            reflectedLight.directSpecular *= 1.0 / (1.0 + dot(reflectedLight.directSpecular, LUMA) * 4.0);
+            #ifdef USE_SHEEN
+              sheenSpecularDirect *= knee;
+              sheenSpecularDirect *= 1.0 / (1.0 + dot(sheenSpecularDirect, LUMA) * 7.0);
+            #endif
               vec3 gcell = floor(vRestPos * 1400.0);
               vec3 vdir = normalize(vViewPosition);
               float gh = furHash(gcell + floor(vdir * 9.0));
@@ -195,7 +235,7 @@ export class Fur {
             }`,
           );
       };
-      fur.customProgramCacheKey = () => 'tiger-fur';
+      fur.customProgramCacheKey = () => 'tiger-fur-4';
       const shells = new THREE.SkinnedMesh(geo, fur);
       shells.name = 'tigerFur';
       shells.frustumCulled = false;

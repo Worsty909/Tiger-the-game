@@ -62,3 +62,18 @@ hádanek + tajemství.
 Po každém milníku: `npm run build` bez chyb + Playwright (headless Chromium, WebGL přes
 SwiftShader) se screenshoty do `screenshots/`. Nástroje: `tools/screenshots.mjs`,
 `tools/playthrough.mjs`, `tools/fps.mjs`.
+
+## Stav
+
+Všechny milníky M1–M5 jsou hotové.
+
+| Co | Jak ověřeno | Výsledek |
+| --- | --- | --- |
+| Sestavení | `npm run build` (kontrola typů + Vite) | bez chyb |
+| Spuštění | `npm run dev` → menu → Nová hra → intro | běží, konzole bez chyb |
+| Průchod hrou | `npm run test:playthrough` – 78 kontrol: dosažitelnost skoků, všech 8 kroků skutečnými vstupy, tajemství, nápovědy, autosave, finále | **PRŮCHOD HROU: OK**, konzole bez chyb |
+| Klíčové záběry | `npm run test:shots` – 16 záběrů (`screenshots/01_…16_`) na předvolbě Střední | prohlédnuto a laděno v několika iteracích |
+| Výkon | `npm run test:fps` na předvolbě Vysoká | viz README, oddíl Výkon |
+
+Co se v tomto prostředí ověřit nedalo: FPS na skutečné grafické kartě (testy běží na softwarovém
+rasterizéru) a poslech zvuku. Obojí je popsáno v README.
